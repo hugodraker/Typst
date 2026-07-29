@@ -22,7 +22,7 @@ endobj
 << /Type /Page /Parent 2 0 R /MediaBox [0 0 612.00 792.00] /Contents 8 0 R /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R /F4 6 0 R >> >> >>
 endobj
 8 0 obj
-<< /Length 5866 >>
+<< /Length 5925 >>
 stream
 BT
 /F2 18.0 Tf
@@ -141,7 +141,7 @@ BT
 /F1 10.0 Tf
 0.176 0.216 0.282 rg
 388.70 611.13 Td
-( July 28, 2026 :) Tj
+( July 28, 2026 ) Tj
 ET
 0 0 0 rg
 BT
@@ -359,9 +359,9 @@ BT
 ET
 0 0 0 rg
 0.996 0.988 0.749 rg
-56.69 176.13 498.61 30.00 re f
+56.69 176.13 244.31 30.00 re f
 0.176 0.216 0.282 RG 0.50 w
-56.69 176.13 498.61 30.00 re S
+56.69 176.13 244.31 30.00 re S
 0 0 0 RG
 BT
 /F2 10.0 Tf
@@ -378,7 +378,7 @@ BT
 ET
 0 0 0 rg
 0.929 0.949 0.969 rg
-311.00 176.13 498.61 30.00 re f
+311.00 162.13 244.31 44.00 re f
 BT
 /F2 10.0 Tf
 0.176 0.216 0.282 rg
@@ -390,41 +390,48 @@ BT
 /F1 10.0 Tf
 0.176 0.216 0.282 rg
 396.62 188.13 Td
-( Routine inspection recommended in 90 days.) Tj
+( Routine inspection ) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+319.00 174.13 Td
+(recommended in 90 days.) Tj
 ET
 0 0 0 rg
 0.627 0.682 0.753 RG 0.50 w
-56.69 146.13 m 555.31 146.13 l S
+56.69 132.13 m 555.31 132.13 l S
 0 0 0 RG
 BT
 /F2 10.0 Tf
 0.176 0.216 0.282 rg
-56.69 130.13 Td
+56.69 116.13 Td
 (Technician Signature:) Tj
 ET
 0 0 0 rg
 BT
 /F1 10.0 Tf
 0.176 0.216 0.282 rg
-158.24 130.13 Td
-( David Millergnature:) Tj
+158.24 116.13 Td
+( David Miller) Tj
 ET
 0 0 0 rg
 0.627 0.682 0.753 RG 0.50 w
-348.52 146.13 m 847.13 146.13 l S
+348.52 132.13 m 847.13 132.13 l S
 0 0 0 RG
 BT
 /F2 10.0 Tf
 0.176 0.216 0.282 rg
-348.52 130.13 Td
+348.52 116.13 Td
 (Client Sign-Off:) Tj
 ET
 0 0 0 rg
 BT
 /F1 10.0 Tf
 0.176 0.216 0.282 rg
-419.71 130.13 Td
-( Robert Vanceff:) Tj
+419.71 116.13 Td
+( Robert Vance) Tj
 ET
 0 0 0 rg
 BT
@@ -451,5 +458,5 @@ xref
 trailer
 << /Size 9 /Root 1 0 R >>
 startxref
-6506
+6565
 %%EOF

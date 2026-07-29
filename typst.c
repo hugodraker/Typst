@@ -348,8 +348,9 @@ static void parse_inline_runs(const char* in, TextState base_state, TextRun runs
     while (*p) {
         if (*p == '\\' && (*(p+1) == ' ' || *(p+1) == '\n' || *(p+1) == '\0')) {
             if (bi > 0) {
+                buf[bi] = '\0';
                 runs[*run_count] = (TextRun){"", state.font_size, state.is_bold, state.is_italic, state.fill_color};
-                strncpy(runs[*run_count].text, buf, MAX_STR_LEN - 1);
+                memcpy(runs[*run_count].text, buf, bi + 1);
                 (*run_count)++; bi = 0; buf[0] = '\0';
             }
             runs[*run_count] = (TextRun){"\n", state.font_size, state.is_bold, state.is_italic, state.fill_color};
@@ -364,8 +365,9 @@ static void parse_inline_runs(const char* in, TextState base_state, TextRun runs
 
         if (*p == '*') {
             if (bi > 0) {
+                buf[bi] = '\0';
                 runs[*run_count] = (TextRun){"", state.font_size, state.is_bold, state.is_italic, state.fill_color};
-                strncpy(runs[*run_count].text, buf, MAX_STR_LEN - 1);
+                memcpy(runs[*run_count].text, buf, bi + 1);
                 (*run_count)++; bi = 0; buf[0] = '\0';
             }
             state.is_bold = !state.is_bold;
@@ -374,8 +376,9 @@ static void parse_inline_runs(const char* in, TextState base_state, TextRun runs
 
         if (strncmp(p, "#text(", 6) == 0 || strncmp(p, "text(", 5) == 0) {
             if (bi > 0) {
+                buf[bi] = '\0';
                 runs[*run_count] = (TextRun){"", state.font_size, state.is_bold, state.is_italic, state.fill_color};
-                strncpy(runs[*run_count].text, buf, MAX_STR_LEN - 1);
+                memcpy(runs[*run_count].text, buf, bi + 1);
                 (*run_count)++; bi = 0; buf[0] = '\0';
             }
             int is_hash = (p[0] == '#');
@@ -393,7 +396,6 @@ static void parse_inline_runs(const char* in, TextState base_state, TextRun runs
             char val[128];
             if (extract_param_value(params, "fill", val, sizeof(val))) local_state.fill_color = get_color(val);
             
-            /* ADDED: Positional size parameter support */
             if (extract_param_value(params, "size", val, sizeof(val))) {
                 local_state.font_size = parse_size(val);
             } else {
@@ -436,8 +438,9 @@ static void parse_inline_runs(const char* in, TextState base_state, TextRun runs
     }
 
     if (bi > 0 && *run_count < MAX_RUNS) {
+        buf[bi] = '\0';
         runs[*run_count] = (TextRun){"", state.font_size, state.is_bold, state.is_italic, state.fill_color};
-        strncpy(runs[*run_count].text, buf, MAX_STR_LEN - 1);
+        memcpy(runs[*run_count].text, buf, bi + 1);
         (*run_count)++;
     }
 }
@@ -480,7 +483,6 @@ static void parse_set_directive(void) {
         char val[128];
         if (extract_param_value(params, "fill", val, sizeof(val))) current_state.fill_color = get_color(val);
         
-        /* ADDED: Positional size parameter support */
         if (extract_param_value(params, "size", val, sizeof(val))) {
             current_state.font_size = parse_size(val);
         } else {
@@ -580,9 +582,13 @@ static Node* parse_block_node(NodeType type) {
     }
     if (extract_param_value(param, "inset", val, sizeof(val))) b->inset = parse_size(val);
     if (extract_param_value(param, "width", val, sizeof(val))) {
-        if (strstr(val, "%")) b->width = (atof(val) / 100.0) * (page_width - margin_left - margin_right);
-        else b->width = parse_size(val);
-        b->has_width = 1;
+        if (strstr(val, "%")) {
+            b->width = atof(val) / 100.0;
+            b->has_width = 2; // 2 indicates percentage relative to container width
+        } else {
+            b->width = parse_size(val);
+            b->has_width = 1; // 1 indicates absolute size
+        }
     }
 
     skip_whitespace_and_comments();
@@ -1035,7 +1041,10 @@ static double measure_node_height(Node* n, double max_w) {
             return render_styled_text(NULL, n->content, 0, 0, max_w, n->font_size, n->align, current_state.fill_color, 1);
         }
         case NODE_RECT: {
-            double rw = n->has_width ? n->width : max_w;
+            double rw = max_w;
+            if (n->has_width) {
+                rw = (n->has_width == 2) ? n->width * max_w : n->width;
+            }
             double content_h = 0;
             if (n->child_count > 0) {
                 for (int i = 0; i < n->child_count; i++) content_h += measure_node_height(n->children[i], rw - n->inset*2);
@@ -1091,7 +1100,11 @@ static void render_node(StreamBuffer* sb, Node* n, double* y, double max_w, doub
             *y -= n->height;
             break;
         }
-        case NODE_RECT: {
+case NODE_RECT: {
+            double render_w = max_w;
+            if (n->has_width) {
+                render_w = (n->has_width == 2) ? n->width * max_w : n->width;
+            }
             double inset = n->inset > 0 ? n->inset : 8.0;
             double content_h = 0;
             if (n->child_count > 0) {
