@@ -701,9 +701,17 @@ static Node* parse_table_or_grid(NodeType type) {
         } else { t->fill_color = get_color(fill_val); }
     }
 
-    char stroke_val[MAX_STR_LEN];
+char stroke_val[MAX_STR_LEN];
     if (extract_param_value(param, "stroke", stroke_val, sizeof(stroke_val))) {
-        t->has_stroke = 1; t->stroke_color = get_color(stroke_val); t->stroke_width = 0.5;
+        t->has_stroke = 1;
+        char* plus = strchr(stroke_val, '+');
+        if (plus) { 
+            t->stroke_width = atof(stroke_val); 
+            t->stroke_color = get_color(plus + 1); 
+        } else { 
+            t->stroke_width = 0.5; 
+            t->stroke_color = get_color(stroke_val); 
+        }
     }
     char val[32];
     if (extract_param_value(param, "inset", val, sizeof(val))) t->inset = parse_size(val);
