@@ -540,9 +540,13 @@ static Node* parse_line(void) {
         }
         char length[32];
         if (extract_param_value(param, "length", length, sizeof(length))) {
-            if (strstr(length, "%")) l->width = (atof(length) / 100.0) * (page_width - margin_left - margin_right);
-            else l->width = parse_size(length);
-            l->has_width = 1;
+            if (strstr(length, "%")) {
+                l->width = atof(length) / 100.0;
+                l->has_width = 2; // 2 indicates percentage relative to container width
+            } else {
+                l->width = parse_size(length);
+                l->has_width = 1; // 1 indicates absolute size
+            }
         }
     }
     return l;
@@ -1088,7 +1092,10 @@ static void render_node(StreamBuffer* sb, Node* n, double* y, double max_w, doub
             break;
         }
         case NODE_LINE: {
-            double lw = n->has_width ? n->width : max_w;
+            double lw = max_w;
+            if (n->has_width) {
+                lw = (n->has_width == 2) ? n->width * max_w : n->width;
+            }
             Color lc = n->has_stroke ? n->stroke_color : get_color("#CBD5E0");
             double sw = n->stroke_width > 0 ? n->stroke_width : 0.5;
             sb_printf(sb, "%.3f %.3f %.3f RG %.2f w\n", lc.r/255.0, lc.g/255.0, lc.b/255.0, sw);
@@ -1177,7 +1184,7 @@ case NODE_RECT: {
             }
             break;
         }
-        case NODE_TABLE: {
+case NODE_TABLE: {
             double total_fixed = 0, total_fr = 0;
             for (int i = 0; i < n->cell_cols; i++) {
                 if (n->is_fr[i]) total_fr += n->col_widths[i];
@@ -1213,17 +1220,20 @@ case NODE_RECT: {
                 else if (n->alt_rows) row_fill = (r % 2 == 0) ? n->stripe_fill_2 : n->stripe_fill_1;
                 else row_fill = n->fill_color;
 
-                sb_printf(sb, "%.3f %.3f %.3f rg\n", row_fill.r/255.0, row_fill.g/255.0, row_fill.b/255.0);
-                sb_printf(sb, "%.2f %.2f %.2f %.2f re f\n", current_x, *y - cell_box_h, render_w, cell_box_h);
-
-                if (n->has_stroke) {
-                    sb_printf(sb, "%.3f %.3f %.3f RG %.2f w\n", n->stroke_color.r/255.0, n->stroke_color.g/255.0, n->stroke_color.b/255.0, n->stroke_width);
-                    sb_printf(sb, "%.2f %.2f %.2f %.2f re S\n0 0 0 RG\n", current_x, *y - cell_box_h, render_w, cell_box_h);
-                }
-
                 double cx = current_x;
                 for (int c = 0; c < n->cell_cols; c++) {
                     Node* cell = n->cells[r][c];
+
+                    // Draw individual cell fill
+                    sb_printf(sb, "%.3f %.3f %.3f rg\n", row_fill.r/255.0, row_fill.g/255.0, row_fill.b/255.0);
+                    sb_printf(sb, "%.2f %.2f %.2f %.2f re f\n", cx, *y - cell_box_h, actual_widths[c], cell_box_h);
+
+                    // Draw individual cell stroke / borders (includes vertical dividers)
+                    if (n->has_stroke) {
+                        sb_printf(sb, "%.3f %.3f %.3f RG %.2f w\n", n->stroke_color.r/255.0, n->stroke_color.g/255.0, n->stroke_color.b/255.0, n->stroke_width);
+                        sb_printf(sb, "%.2f %.2f %.2f %.2f re S\n0 0 0 RG\n", cx, *y - cell_box_h, actual_widths[c], cell_box_h);
+                    }
+
                     if (cell) {
                         Color tc = (r == 0 && n->alt_rows) ? (Color){255,255,255,"white"} : current_state.fill_color;
                         if (cell->child_count > 0) {
