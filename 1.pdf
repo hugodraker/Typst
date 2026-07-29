@@ -22,422 +22,415 @@ endobj
 << /Type /Page /Parent 2 0 R /MediaBox [0 0 612.00 792.00] /Contents 8 0 R /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R /F4 6 0 R >> >> >>
 endobj
 8 0 obj
-<< /Length 5938 >>
+<< /Length 5866 >>
 stream
 BT
-/F2 10.0 Tf
+/F2 18.0 Tf
 0.169 0.424 0.690 rg
-56.69 711.13 Td
+56.69 703.13 Td
 (Nexus Industrial Systems) Tj
 ET
 0 0 0 rg
 BT
 /F1 10.0 Tf
 0.176 0.216 0.282 rg
-176.69 711.13 Td
+269.90 703.13 Td
 ( ) Tj
 ET
 0 0 0 rg
 BT
-/F1 10.0 Tf
+/F1 9.0 Tf
 0.290 0.333 0.408 rg
-56.69 683.13 Td
+56.69 667.13 Td
 (Technical Field Services Division) Tj
 ET
 0 0 0 rg
 BT
-/F2 10.0 Tf
+/F2 20.0 Tf
 0.169 0.424 0.690 rg
-482.11 711.13 Td
+366.99 701.13 Td
 (SERVICE REPORT) Tj
 ET
 0 0 0 rg
 BT
 /F1 10.0 Tf
 0.176 0.216 0.282 rg
-552.51 711.13 Td
+552.53 701.13 Td
 ( ) Tj
 ET
 0 0 0 rg
 BT
 /F2 10.0 Tf
 0.176 0.216 0.282 rg
-456.11 681.13 Td
+454.10 661.13 Td
 (Report ID:) Tj
 ET
 0 0 0 rg
 BT
 /F1 10.0 Tf
 0.176 0.216 0.282 rg
-505.71 681.13 Td
+501.95 661.13 Td
 ( #SR-99421) Tj
 ET
 0 0 0 rg
 0.169 0.424 0.690 RG 1.50 w
-56.69 667.13 m 555.31 667.13 l S
+56.69 647.13 m 555.31 647.13 l S
 0 0 0 RG
 0.929 0.949 0.969 rg
-56.69 549.13 498.61 100.00 re f
+56.69 529.13 498.61 100.00 re f
 0.176 0.216 0.282 RG 0.50 w
-56.69 549.13 498.61 100.00 re S
+56.69 529.13 498.61 100.00 re S
 0 0 0 RG
 BT
 /F2 10.0 Tf
 0.176 0.216 0.282 rg
-64.69 631.13 Td
+64.69 611.13 Td
 (Client:) Tj
 ET
 0 0 0 rg
 BT
 /F1 10.0 Tf
 0.176 0.216 0.282 rg
-101.09 631.13 Td
+94.45 611.13 Td
 ( Midwest Manufacturing Inc. ) Tj
 ET
 0 0 0 rg
 BT
 /F2 10.0 Tf
 0.176 0.216 0.282 rg
-64.69 603.13 Td
+64.69 583.13 Td
 (Site Location:) Tj
 ET
 0 0 0 rg
 BT
 /F1 10.0 Tf
 0.176 0.216 0.282 rg
-135.09 603.13 Td
+128.31 583.13 Td
 ( Plant #3 - 1400 Industrial Pkwy, ) Tj
 ET
 0 0 0 rg
 BT
 /F1 10.0 Tf
 0.176 0.216 0.282 rg
-64.69 589.13 Td
+64.69 569.13 Td
 (Gary, IN ) Tj
 ET
 0 0 0 rg
 BT
 /F2 10.0 Tf
 0.176 0.216 0.282 rg
-64.69 561.13 Td
+64.69 541.13 Td
 (Contact:) Tj
 ET
 0 0 0 rg
 BT
 /F1 10.0 Tf
 0.176 0.216 0.282 rg
-106.29 561.13 Td
+103.79 541.13 Td
 ( Robert Vance \(Maintenance Mgr\)) Tj
 ET
 0 0 0 rg
 BT
 /F2 10.0 Tf
 0.176 0.216 0.282 rg
-314.00 631.13 Td
+314.00 611.13 Td
 (Date of Service:) Tj
 ET
 0 0 0 rg
 BT
 /F1 10.0 Tf
 0.176 0.216 0.282 rg
-392.40 631.13 Td
+388.70 611.13 Td
 ( July 28, 2026 :) Tj
 ET
 0 0 0 rg
 BT
 /F2 10.0 Tf
 0.176 0.216 0.282 rg
-314.00 603.13 Td
+314.00 583.13 Td
 (Technician:) Tj
 ET
 0 0 0 rg
 BT
 /F1 10.0 Tf
 0.176 0.216 0.282 rg
-371.20 603.13 Td
+367.69 583.13 Td
 ( David Miller \(Tech ID: 8042\) ) Tj
 ET
 0 0 0 rg
 BT
 /F2 10.0 Tf
 0.176 0.216 0.282 rg
-314.00 575.13 Td
+314.00 555.13 Td
 (Asset / Serial ID:) Tj
 ET
 0 0 0 rg
 BT
 /F1 10.0 Tf
 0.176 0.216 0.282 rg
-400.40 575.13 Td
+392.19 555.13 Td
 ( CNC-Milling Unit #04 \(SN: ) Tj
 ET
 0 0 0 rg
 BT
 /F1 10.0 Tf
 0.176 0.216 0.282 rg
-314.00 561.13 Td
+314.00 541.13 Td
 (883-9021\)) Tj
 ET
 0 0 0 rg
 BT
 /F1 15.0 Tf
 0.169 0.424 0.690 rg
-56.69 519.13 Td
+56.69 499.13 Td
 (1. Work Performed & Findings) Tj
 ET
 0 0 0 rg
 0.969 0.980 0.988 rg
-56.69 440.13 498.61 62.00 re f
+56.69 420.13 498.61 62.00 re f
 0.176 0.216 0.282 RG 0.50 w
-56.69 440.13 498.61 62.00 re S
+56.69 420.13 498.61 62.00 re S
 0 0 0 RG
 BT
 /F1 10.0 Tf
 0.176 0.216 0.282 rg
-66.69 482.13 Td
+66.69 462.13 Td
 (Performed emergency diagnostic on main drive motor overheating issue. Replaced degraded thermal ) Tj
 ET
 0 0 0 rg
 BT
 /F1 10.0 Tf
 0.176 0.216 0.282 rg
-66.69 468.13 Td
-(coupling, flushed cooling lines, and updated firmware to v4.2.1. System recalibrated and ) Tj
+66.69 448.13 Td
+(coupling, flushed cooling lines, and updated firmware to v4.2.1. System recalibrated and load-tested for 45 ) Tj
 ET
 0 0 0 rg
 BT
 /F1 10.0 Tf
 0.176 0.216 0.282 rg
-66.69 454.13 Td
-(load-tested for 45 minutes under nominal factory conditions with zero thermal warnings.) Tj
+66.69 434.13 Td
+(minutes under nominal factory conditions with zero thermal warnings.) Tj
 ET
 0 0 0 rg
 BT
 /F1 15.0 Tf
 0.169 0.424 0.690 rg
-56.69 402.13 Td
+56.69 382.13 Td
 (2. Parts & Materials Used) Tj
 ET
 0 0 0 rg
 0.169 0.424 0.690 rg
-56.69 357.13 498.61 28.00 re f
+56.69 337.13 498.61 28.00 re f
 0.176 0.216 0.282 RG 0.50 w
-56.69 357.13 498.61 28.00 re S
+56.69 337.13 498.61 28.00 re S
 0 0 0 RG
 BT
 /F2 10.0 Tf
 1.000 1.000 1.000 rg
-87.29 368.13 Td
+87.69 348.13 Td
 (Part #) Tj
 ET
 0 0 0 rg
 BT
 /F2 10.0 Tf
 1.000 1.000 1.000 rg
-262.40 368.13 Td
+264.74 348.13 Td
 (Description) Tj
 ET
 0 0 0 rg
 BT
 /F2 10.0 Tf
 1.000 1.000 1.000 rg
-447.51 368.13 Td
+447.14 348.13 Td
 (Qty) Tj
 ET
 0 0 0 rg
 BT
 /F2 10.0 Tf
 1.000 1.000 1.000 rg
-517.11 368.13 Td
+518.54 348.13 Td
 (Status) Tj
 ET
 0 0 0 rg
 1.000 1.000 1.000 rg
-56.69 329.13 498.61 28.00 re f
+56.69 309.13 498.61 28.00 re f
 0.176 0.216 0.282 RG 0.50 w
-56.69 329.13 498.61 28.00 re S
+56.69 309.13 498.61 28.00 re S
 0 0 0 RG
 BT
 /F1 10.0 Tf
 0.176 0.216 0.282 rg
-83.49 340.13 Td
+82.24 320.13 Td
 (TC-9042) Tj
 ET
 0 0 0 rg
 BT
 /F1 10.0 Tf
 0.176 0.216 0.282 rg
-225.80 340.13 Td
+225.43 320.13 Td
 (High-Temp Thermal Coupling) Tj
 ET
 0 0 0 rg
 BT
 /F1 10.0 Tf
 0.176 0.216 0.282 rg
-452.71 340.13 Td
+452.53 320.13 Td
 (1) Tj
 ET
 0 0 0 rg
 BT
 /F1 10.0 Tf
 0.176 0.216 0.282 rg
-506.71 340.13 Td
+506.07 320.13 Td
 (Replaced) Tj
 ET
 0 0 0 rg
 0.969 0.980 0.988 rg
-56.69 301.13 498.61 28.00 re f
+56.69 281.13 498.61 28.00 re f
 0.176 0.216 0.282 RG 0.50 w
-56.69 301.13 498.61 28.00 re S
+56.69 281.13 498.61 28.00 re S
 0 0 0 RG
 BT
 /F1 10.0 Tf
 0.176 0.216 0.282 rg
-83.49 312.13 Td
+82.52 292.13 Td
 (CL-1020) Tj
 ET
 0 0 0 rg
 BT
 /F1 10.0 Tf
 0.176 0.216 0.282 rg
-221.80 312.13 Td
+229.31 292.13 Td
 (Synthetic Coolant Fluid \(1L\)) Tj
 ET
 0 0 0 rg
 BT
 /F1 10.0 Tf
 0.176 0.216 0.282 rg
-452.71 312.13 Td
+452.53 292.13 Td
 (2) Tj
 ET
 0 0 0 rg
 BT
 /F1 10.0 Tf
 0.176 0.216 0.282 rg
-506.71 312.13 Td
+499.96 292.13 Td
 (Consumed) Tj
 ET
 0 0 0 rg
 1.000 1.000 1.000 rg
-56.69 273.13 498.61 28.00 re f
+56.69 253.13 498.61 28.00 re f
 0.176 0.216 0.282 RG 0.50 w
-56.69 273.13 498.61 28.00 re S
+56.69 253.13 498.61 28.00 re S
 0 0 0 RG
 BT
 /F1 10.0 Tf
 0.176 0.216 0.282 rg
-83.49 284.13 Td
+81.13 264.13 Td
 (FW-4200) Tj
 ET
 0 0 0 rg
 BT
 /F1 10.0 Tf
 0.176 0.216 0.282 rg
-221.80 284.13 Td
+219.60 264.13 Td
 (Firmware Update Flash Memory) Tj
 ET
 0 0 0 rg
 BT
 /F1 10.0 Tf
 0.176 0.216 0.282 rg
-452.71 284.13 Td
+452.53 264.13 Td
 (1) Tj
 ET
 0 0 0 rg
 BT
 /F1 10.0 Tf
 0.176 0.216 0.282 rg
-501.51 284.13 Td
+511.07 264.13 Td
 (Installed) Tj
 ET
 0 0 0 rg
 BT
 /F1 15.0 Tf
 0.169 0.424 0.690 rg
-56.69 243.13 Td
+56.69 223.13 Td
 (3. Job Status & Follow-Up) Tj
 ET
 0 0 0 rg
 0.996 0.988 0.749 rg
-56.69 196.13 498.61 30.00 re f
+56.69 176.13 498.61 30.00 re f
 0.176 0.216 0.282 RG 0.50 w
-56.69 196.13 498.61 30.00 re S
+56.69 176.13 498.61 30.00 re S
 0 0 0 RG
 BT
 /F2 10.0 Tf
 0.176 0.216 0.282 rg
-64.69 208.13 Td
+64.69 188.13 Td
 (Job Status:) Tj
 ET
 0 0 0 rg
 BT
 /F1 10.0 Tf
 0.176 0.216 0.282 rg
-119.49 208.13 Td
+117.22 188.13 Td
 ( Completed / Operable) Tj
 ET
 0 0 0 rg
 0.929 0.949 0.969 rg
-311.00 196.13 498.61 30.00 re f
+311.00 176.13 498.61 30.00 re f
 BT
 /F2 10.0 Tf
 0.176 0.216 0.282 rg
-319.00 208.13 Td
+319.00 188.13 Td
 (Action Required:) Tj
 ET
 0 0 0 rg
 BT
 /F1 10.0 Tf
 0.176 0.216 0.282 rg
-399.80 208.13 Td
+396.62 188.13 Td
 ( Routine inspection recommended in 90 days.) Tj
 ET
 0 0 0 rg
 0.627 0.682 0.753 RG 0.50 w
-56.69 166.13 m 555.31 166.13 l S
+56.69 146.13 m 555.31 146.13 l S
 0 0 0 RG
 BT
 /F2 10.0 Tf
 0.176 0.216 0.282 rg
-56.69 150.13 Td
+56.69 130.13 Td
 (Technician Signature:) Tj
 ET
 0 0 0 rg
 BT
 /F1 10.0 Tf
 0.176 0.216 0.282 rg
-163.49 150.13 Td
-( David ) Tj
-ET
-0 0 0 rg
-BT
-/F1 10.0 Tf
-0.176 0.216 0.282 rg
-56.69 136.13 Td
-(Millergnature:) Tj
+158.24 130.13 Td
+( David Millergnature:) Tj
 ET
 0 0 0 rg
 0.627 0.682 0.753 RG 0.50 w
-348.52 166.13 m 847.13 166.13 l S
+348.52 146.13 m 847.13 146.13 l S
 0 0 0 RG
 BT
 /F2 10.0 Tf
 0.176 0.216 0.282 rg
-348.52 150.13 Td
+348.52 130.13 Td
 (Client Sign-Off:) Tj
 ET
 0 0 0 rg
 BT
 /F1 10.0 Tf
 0.176 0.216 0.282 rg
-429.32 150.13 Td
+419.71 130.13 Td
 ( Robert Vanceff:) Tj
 ET
 0 0 0 rg
 BT
 /F1 8.0 Tf
 0.443 0.502 0.588 rg
-190.00 35.43 Td
+198.47 35.43 Td
 (Page 1 | Confidential Technical Field Service Documentation) Tj
 ET
 0 0 0 rg
@@ -458,5 +451,5 @@ xref
 trailer
 << /Size 9 /Root 1 0 R >>
 startxref
-6578
+6506
 %%EOF
