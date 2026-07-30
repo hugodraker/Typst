@@ -4,7 +4,6 @@
  * Typst-like C Rendering Engine 
  * Compile: gcc -Os -s -o typst.exe typst.c -lm
  * THIS WORK IS NOT FIT FOR ANY FUNCTION OR PURPOSE, COMES WITH NO WARRANTY,
- *
  * AND IS BEING RELEASED INTO THE PUBLIC DOMAIN.
  * ============================================================================ */
 
@@ -542,10 +541,10 @@ static Node* parse_line(void) {
         if (extract_param_value(param, "length", length, sizeof(length))) {
             if (strstr(length, "%")) {
                 l->width = atof(length) / 100.0;
-                l->has_width = 2; // 2 indicates percentage relative to container width
+                l->has_width = 2;
             } else {
                 l->width = parse_size(length);
-                l->has_width = 1; // 1 indicates absolute size
+                l->has_width = 1;
             }
         }
     }
@@ -570,7 +569,8 @@ static Node* parse_block_node(NodeType type) {
         int pi = 0, depth = 1;
         while (source[source_pos] && depth > 0) {
             if (depth == 1 && source[source_pos] == '[') {
-                expects_closing_paren = 1;
+                // Fixed: Do not expect a closing ')' after '[...]' when syntax is rect(...)[...]
+                expects_closing_paren = 0;
                 break;
             }
             if (source[source_pos] == '(') depth++; else if (source[source_pos] == ')') depth--;
@@ -588,10 +588,10 @@ static Node* parse_block_node(NodeType type) {
     if (extract_param_value(param, "width", val, sizeof(val))) {
         if (strstr(val, "%")) {
             b->width = atof(val) / 100.0;
-            b->has_width = 2; // 2 indicates percentage relative to container width
+            b->has_width = 2; // relative percentage
         } else {
             b->width = parse_size(val);
-            b->has_width = 1; // 1 indicates absolute size
+            b->has_width = 1; // absolute size
         }
     }
 
@@ -628,80 +628,79 @@ static Node* parse_block_node(NodeType type) {
 static Node* parse_table_or_grid(NodeType type) {
     Node* t = alloc_node(type);
     if (!t) return NULL;
-    if (type == NODE_TABLE) {
-        if (strncmp(&source[source_pos], "#table", 6) == 0) match_str("#table"); else match_str("table");
-    } else {
+    if (type == NODE_GRID) {
         if (strncmp(&source[source_pos], "#grid", 5) == 0) match_str("#grid"); else match_str("grid");
+    } else {
+        if (strncmp(&source[source_pos], "#table", 6) == 0) match_str("#table"); else match_str("table");
     }
-
     skip_whitespace_and_comments();
-    char param[MAX_STR_LEN] = {0}; 
-    int pi = 0, depth = 0;
     
+    char param[MAX_STR_LEN] = {0};
     if (source[source_pos] == '(') {
-        depth = 1; source_pos++;
+        source_pos++;
+        int pi = 0, depth = 1;
         while (source[source_pos] && depth > 0) {
-            if (depth == 1 && (source[source_pos] == '[' || source[source_pos] == '"' || 
-                               strncmp(&source[source_pos], "rect(", 5) == 0 ||
-                               strncmp(&source[source_pos], "#rect(", 6) == 0 ||
-                               strncmp(&source[source_pos], "align(", 6) == 0 ||
-                               strncmp(&source[source_pos], "#align(", 7) == 0 ||
-                               strncmp(&source[source_pos], "text(", 5) == 0 ||
-                               strncmp(&source[source_pos], "#text(", 6) == 0)) {
+            // Fixed: Stop param extraction when encountering any child block, rect, block, line, or align cell at depth 1
+            if (depth == 1 && (source[source_pos] == '[' || 
+                              strncmp(&source[source_pos], "rect(", 5) == 0 ||
+                              strncmp(&source[source_pos], "#rect(", 6) == 0 ||
+                              strncmp(&source[source_pos], "block(", 6) == 0 ||
+                              strncmp(&source[source_pos], "#block(", 7) == 0 ||
+                              strncmp(&source[source_pos], "align(", 6) == 0 ||
+                              strncmp(&source[source_pos], "#align(", 7) == 0 ||
+                              strncmp(&source[source_pos], "line(", 5) == 0 ||
+                              strncmp(&source[source_pos], "#line(", 6) == 0 ||
+                              strncmp(&source[source_pos], "table(", 6) == 0 ||
+                              strncmp(&source[source_pos], "#table(", 7) == 0 ||
+                              strncmp(&source[source_pos], "grid(", 5) == 0 ||
+                              strncmp(&source[source_pos], "#grid(", 6) == 0)) {
                 break;
             }
-            if (source[source_pos] == '(' || source[source_pos] == '[') depth++;
-            else if (source[source_pos] == ')' || source[source_pos] == ']') depth--;
-            
+            if (source[source_pos] == '(') depth++; else if (source[source_pos] == ')') depth--;
             if (depth > 0 && pi < MAX_STR_LEN - 1) param[pi++] = source[source_pos];
             source_pos++;
         }
         param[pi] = '\0';
     }
 
-    char cols_str[MAX_STR_LEN];
-    if (extract_param_value(param, "columns", cols_str, sizeof(cols_str))) {
-        if (cols_str[0] == '(') {
-            const char* p = cols_str + 1; int col = 0;
-            while (*p && *p != ')' && col < MAX_TABLE_COLS) {
-                char buf[32]; int i = 0;
-                while (*p && *p != ',' && *p != ')' && i < 31) {
-                    if (!isspace((unsigned char)*p)) buf[i++] = *p; p++;
+    char val[MAX_STR_LEN];
+    if (extract_param_value(param, "columns", val, sizeof(val))) {
+        t->cell_cols = 0;
+        char* p = val;
+        while (*p) {
+            while (*p && (isspace((unsigned char)*p) || *p == '(' || *p == ')' || *p == ',')) p++;
+            if (!*p) break;
+            if (strncmp(p, "1fr", 3) == 0 || strncmp(p, "fr", 2) == 0) {
+                t->col_widths[t->cell_cols] = 1.0;
+                t->is_fr[t->cell_cols] = 1;
+                t->cell_cols++;
+                while (*p && *p != ',') p++;
+            } else if (isdigit((unsigned char)*p)) {
+                double w = atof(p);
+                while (*p && !isspace((unsigned char)*p) && *p != ',' && *p != ')') p++;
+                if (strncmp(p, "fr", 2) == 0) {
+                    t->col_widths[t->cell_cols] = w;
+                    t->is_fr[t->cell_cols] = 1;
+                    while (*p && *p != ',') p++;
+                } else {
+                    t->col_widths[t->cell_cols] = w;
+                    t->is_fr[t->cell_cols] = 0;
                 }
-                buf[i] = '\0';
-                if (strstr(buf, "fr")) { t->is_fr[col] = 1; t->col_widths[col] = atof(buf); }
-                else { t->is_fr[col] = 0; t->col_widths[col] = parse_size(buf); }
-                col++; if (*p == ',') p++;
-            }
-            t->cell_cols = col > 0 ? col : 1;
-        }
-    } else { t->cell_cols = 1; t->is_fr[0] = 1; t->col_widths[0] = 1.0; }
-
-    char align_str[MAX_STR_LEN];
-    if (extract_param_value(param, "align", align_str, sizeof(align_str))) {
-        if (align_str[0] == '(') {
-            const char* p = align_str + 1; int col = 0;
-            while (*p && *p != ')' && col < MAX_TABLE_COLS) {
-                if (strstr(p, "center")) t->col_aligns[col] = 1;
-                else if (strstr(p, "right")) t->col_aligns[col] = 2;
-                else t->col_aligns[col] = 0;
-                while (*p && *p != ',' && *p != ')') p++;
-                if (*p == ',') { p++; col++; }
+                t->cell_cols++;
+            } else {
+                p++;
             }
         }
     }
 
-    char fill_val[MAX_STR_LEN];
-    if (extract_param_value(param, "fill", fill_val, sizeof(fill_val))) {
-        if (strstr(fill_val, "=>")) {
-            t->alt_rows = 1;
-            t->header_fill = get_color("#2B6CB0");
-            t->stripe_fill_1 = get_color("#FFFFFF");
-            t->stripe_fill_2 = get_color("#F7FAFC");
-        } else { t->fill_color = get_color(fill_val); }
+    if (extract_param_value(param, "align", val, sizeof(val))) {
+        int default_align = 0;
+        if (strstr(val, "center")) default_align = 1;
+        else if (strstr(val, "right")) default_align = 2;
+        for (int i = 0; i < MAX_TABLE_COLS; i++) t->col_aligns[i] = default_align;
     }
 
-char stroke_val[MAX_STR_LEN];
+    char stroke_val[MAX_STR_LEN];
     if (extract_param_value(param, "stroke", stroke_val, sizeof(stroke_val))) {
         t->has_stroke = 1;
         char* plus = strchr(stroke_val, '+');
@@ -713,16 +712,37 @@ char stroke_val[MAX_STR_LEN];
             t->stroke_color = get_color(stroke_val); 
         }
     }
-    char val[32];
-    if (extract_param_value(param, "inset", val, sizeof(val))) t->inset = parse_size(val);
-    if (extract_param_value(param, "gutter", val, sizeof(val))) t->gutter = parse_size(val);
+
+    if (extract_param_value(param, "fill", val, sizeof(val))) {
+        if (strstr(val, "calc.even") || strstr(val, "row")) {
+            t->alt_rows = 1;
+            t->header_fill = get_color("#1A365D");
+            t->stripe_fill_1 = (Color){255, 255, 255, "white"};
+            t->stripe_fill_2 = get_color("#F7FAFC");
+        } else {
+            t->fill_color = get_color(val);
+        }
+    }
+
+    if (extract_param_value(param, "inset", val, sizeof(val))) {
+        t->inset = parse_size(val);
+    }
+
+    // Fixed: Added gutter extraction
+    if (extract_param_value(param, "gutter", val, sizeof(val))) {
+        t->gutter = parse_size(val);
+    }
 
     int cell = 0;
     while (source[source_pos]) {
         skip_whitespace_and_comments();
-        if (source[source_pos] == ')' || source[source_pos] == ']') { consume(); break; }
+        if (source[source_pos] == ')' || source[source_pos] == ']') { 
+            if (source[source_pos] == ')') consume(); 
+            break; 
+        }
 
-        int row = cell / t->cell_cols; int col = cell % t->cell_cols;
+        int row = cell / t->cell_cols; 
+        int col = cell % t->cell_cols;
         Node* cell_node = alloc_node(NODE_BLOCK);
         if (!cell_node) break;
         cell_node->align = t->col_aligns[col];
@@ -752,28 +772,12 @@ char stroke_val[MAX_STR_LEN];
             }
             source[saved_pos - 1] = saved; source_pos = saved_pos;
             for (int k = 0; k < cell_node->child_count; k++) cell_node->children[k]->align = cell_node->align;
-        } else if (strncmp(&source[source_pos], "rect(", 5) == 0 || strncmp(&source[source_pos], "#rect(", 6) == 0) {
-            Node* child = parse_block_node(NODE_RECT);
-            if (child) cell_node->children[cell_node->child_count++] = child;
         } else {
-            int ci = 0;
-            int depth_p = 0, depth_b = 0;
-            while (source[source_pos] && ci < MAX_STR_LEN - 1) {
-                char c = source[source_pos];
-                
-                if (depth_p == 0 && depth_b == 0 && (c == ',' || c == ')' || c == ']')) {
-                    break;
-                }
-                
-                if (c == '(') depth_p++;
-                else if (c == ')') depth_p--;
-                else if (c == '[') depth_b++;
-                else if (c == ']') depth_b--;
-
-                cell_node->content[ci++] = source[source_pos++];
+            Node* elem = parse_element();
+            if (elem) {
+                cell_node->children[cell_node->child_count++] = elem;
+                elem->align = cell_node->align;
             }
-            while (ci > 0 && isspace((unsigned char)cell_node->content[ci-1])) ci--;
-            cell_node->content[ci] = '\0';
         }
 
         if (row < MAX_GRID_ROWS && col < MAX_TABLE_COLS) t->cells[row][col] = cell_node;
@@ -782,7 +786,7 @@ char stroke_val[MAX_STR_LEN];
         skip_whitespace_and_comments();
         if (source[source_pos] == ',') consume();
     }
-    t->cell_rows = cell == 0 ? 1 : ((cell - 1) / t->cell_cols + 1);
+    t->cell_rows = (cell + t->cell_cols - 1) / t->cell_cols;
     return t;
 }
 
@@ -831,30 +835,52 @@ static Node* parse_element(void) {
 
     if (strncmp(&source[source_pos], "#line", 5) == 0 || strncmp(&source[source_pos], "line(", 5) == 0) return parse_line();
     if (strncmp(&source[source_pos], "#rect", 5) == 0 || strncmp(&source[source_pos], "rect(", 5) == 0) return parse_block_node(NODE_RECT);
+    if (strncmp(&source[source_pos], "#block", 6) == 0 || strncmp(&source[source_pos], "block(", 6) == 0) return parse_block_node(NODE_BLOCK);
     if (strncmp(&source[source_pos], "#grid", 5) == 0 || strncmp(&source[source_pos], "grid(", 5) == 0) return parse_table_or_grid(NODE_GRID);
     if (strncmp(&source[source_pos], "#table", 6) == 0 || strncmp(&source[source_pos], "table(", 6) == 0) return parse_table_or_grid(NODE_TABLE);
 
     if (strncmp(&source[source_pos], "#align(", 7) == 0 || strncmp(&source[source_pos], "#pad(", 5) == 0) {
-        Node* p = alloc_node(NODE_PARAGRAPH);
-        if (!p) return NULL;
+        Node* b = alloc_node(NODE_BLOCK);
+        if (!b) return NULL;
         if (strncmp(&source[source_pos], "#align(", 7) == 0) {
-            if (strstr(&source[source_pos], "center")) p->align = 1;
-            else if (strstr(&source[source_pos], "right")) p->align = 2;
+            if (strstr(&source[source_pos], "center")) b->align = 1;
+            else if (strstr(&source[source_pos], "right")) b->align = 2;
         }
         while (source[source_pos] && source[source_pos] != ')' && source[source_pos] != '\n') source_pos++;
         if (source[source_pos] == ')') source_pos++;
         skip_whitespace_and_comments();
         if (source[source_pos] == '[') {
-            extract_bracket_content(p->content, MAX_STR_LEN);
+            int start = source_pos + 1;
+            int depth = 1; source_pos++;
+            while (source[source_pos] && depth > 0) {
+                if (source[source_pos] == '[') depth++; else if (source[source_pos] == ']') depth--;
+                source_pos++;
+            }
+            char saved = source[source_pos - 1];
+            source[source_pos - 1] = '\0';
+            int saved_pos = source_pos;
+            source_pos = start;
+            
+            while (skip_whitespace_and_comments() != 0) {
+                int prev = source_pos;
+                Node* elem = parse_element();
+                if (elem && b->child_count < 512) {
+                    elem->align = b->align;
+                    b->children[b->child_count++] = elem;
+                }
+                if (source_pos == prev) source_pos++;
+            }
+            source[saved_pos - 1] = saved;
+            source_pos = saved_pos;
         } else {
             int i = 0;
             while (source[source_pos] && source[source_pos] != '\n' && i < MAX_STR_LEN - 1) {
-                p->content[i++] = source[source_pos++];
+                b->content[i++] = source[source_pos++];
             }
-            while (i > 0 && isspace((unsigned char)p->content[i-1])) i--;
-            p->content[i] = '\0';
+            while (i > 0 && isspace((unsigned char)b->content[i-1])) i--;
+            b->content[i] = '\0';
         }
-        return p;
+        return b;
     }
 
     return parse_plain_text();
@@ -1045,12 +1071,16 @@ static double measure_node_height(Node* n, double max_w) {
             return render_styled_text(NULL, n->content, 0, 0, max_w, n->font_size, n->align, current_state.fill_color, 1);
         }
         case NODE_BLOCK: {
+            double bw = max_w;
+            if (n->has_width) {
+                bw = (n->has_width == 2) ? n->width * max_w : n->width;
+            }
             if (n->child_count > 0) {
                 double h = 0;
-                for (int i = 0; i < n->child_count; i++) h += measure_node_height(n->children[i], max_w);
+                for (int i = 0; i < n->child_count; i++) h += measure_node_height(n->children[i], bw);
                 return h;
             }
-            return render_styled_text(NULL, n->content, 0, 0, max_w, n->font_size, n->align, current_state.fill_color, 1);
+            return render_styled_text(NULL, n->content, 0, 0, bw, n->font_size, n->align, current_state.fill_color, 1);
         }
         case NODE_RECT: {
             double rw = max_w;
@@ -1094,8 +1124,16 @@ static void render_node(StreamBuffer* sb, Node* n, double* y, double max_w, doub
             break;
         }
         case NODE_BLOCK: {
+            double bw = max_w;
+            if (n->has_width) {
+                bw = (n->has_width == 2) ? n->width * max_w : n->width;
+            }
+            double bx = current_x;
+            if (n->align == 1) bx = start_x + (max_w - bw) / 2.0;
+            else if (n->align == 2) bx = start_x + (max_w - bw);
+
             for (int i = 0; i < n->child_count; i++) {
-                render_node(sb, n->children[i], y, render_w, current_x, page_idx);
+                render_node(sb, n->children[i], y, bw, bx, page_idx);
             }
             break;
         }
@@ -1115,7 +1153,7 @@ static void render_node(StreamBuffer* sb, Node* n, double* y, double max_w, doub
             *y -= n->height;
             break;
         }
-case NODE_RECT: {
+        case NODE_RECT: {
             double render_w = max_w;
             if (n->has_width) {
                 render_w = (n->has_width == 2) ? n->width * max_w : n->width;
@@ -1192,7 +1230,7 @@ case NODE_RECT: {
             }
             break;
         }
-case NODE_TABLE: {
+        case NODE_TABLE: {
             double total_fixed = 0, total_fr = 0;
             for (int i = 0; i < n->cell_cols; i++) {
                 if (n->is_fr[i]) total_fr += n->col_widths[i];
@@ -1232,11 +1270,9 @@ case NODE_TABLE: {
                 for (int c = 0; c < n->cell_cols; c++) {
                     Node* cell = n->cells[r][c];
 
-                    // Draw individual cell fill
                     sb_printf(sb, "%.3f %.3f %.3f rg\n", row_fill.r/255.0, row_fill.g/255.0, row_fill.b/255.0);
                     sb_printf(sb, "%.2f %.2f %.2f %.2f re f\n", cx, *y - cell_box_h, actual_widths[c], cell_box_h);
 
-                    // Draw individual cell stroke / borders (includes vertical dividers)
                     if (n->has_stroke) {
                         sb_printf(sb, "%.3f %.3f %.3f RG %.2f w\n", n->stroke_color.r/255.0, n->stroke_color.g/255.0, n->stroke_color.b/255.0, n->stroke_width);
                         sb_printf(sb, "%.2f %.2f %.2f %.2f re S\n0 0 0 RG\n", cx, *y - cell_box_h, actual_widths[c], cell_box_h);
