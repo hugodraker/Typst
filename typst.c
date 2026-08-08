@@ -1,3 +1,11 @@
+/* ============================================================================
+ *
+ * typst clone
+ * Typst-like C Rendering Engine 
+ * Compile: gcc -Os -s -o typst.exe typst.c -lm -lgdi32 -luser32 -lgdi32
+ * THIS WORK IS NOT FIT FOR ANY FUNCTION OR PURPOSE, COMES WITH NO WARRANTY,
+ * AND IS BEING RELEASED INTO THE PUBLIC DOMAIN.
+ * ============================================================================ */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -20,10 +28,6 @@
 #define DPI              72.0
 #define MIN(a, b)        ((a) < (b) ? (a) : (b))
 #define MAX(a, b)        ((a) > (b) ? (a) : (b))
-
-/* =========================================
-   TYPE DEFINITIONS
-   ========================================= */
 
 typedef struct {
     int r, g, b;
@@ -50,9 +54,11 @@ typedef struct {
 typedef enum {
     NODE_TEXT, NODE_HEADING, NODE_PARAGRAPH, NODE_LIST, NODE_LIST_ITEM,
     NODE_GRID, NODE_TABLE, NODE_RECT, NODE_BLOCK, NODE_LINE, 
-    NODE_VSPACE, NODE_HSPACE, NODE_PAGE, NODE_HEADER, NODE_FOOTER,
-    NODE_PAGEBREAK, NODE_TSCORE_CHART, NODE_BMD_CHART
+    NODE_VSPACE, NODE_HSPACE, NODE_PAGE, NODE_HEADER,
+    NODE_PAGEBREAK, NODE_TSCORE_CHART, NODE_BMD_CHART, NODE_PIE_CHART,
+    NODE_LINE_CHART
 } NodeType;
+
 
 typedef struct Node Node;
 
@@ -70,6 +76,7 @@ struct Node {
     double font_size;
     int is_bold;
     int is_italic;
+    double radius;
 
     int alt_rows;
     Color header_fill;
@@ -93,6 +100,11 @@ struct Node {
     char chart_v2[32];
     char chart_pct[32];
 
+    char chart_color[32];
+    char chart_x_label[64];
+    char chart_y_label[64];
+    int chart_trend_line;
+
     Node* children[512];
     int child_count;
 };
@@ -115,7 +127,9 @@ typedef struct {
    ========================================= */
 
 #ifdef _WIN32
-typedef enum { DL_TEXT, DL_RECT, DL_LINE } DLType;
+typedef enum {
+    DL_TEXT, DL_RECT, DL_LINE, DL_PIE 
+} DLType;
 typedef struct {
     DLType type;
     int page;
@@ -126,7 +140,10 @@ typedef struct {
     double font_size;
     int is_bold;
     int is_italic;
+    double start_angle; 
+    double end_angle;
 } DLItem;
+
 static DLItem dl_items[32768];
 static int dl_count = 0;
 static int current_render_page = 0;
@@ -141,6 +158,7 @@ static int current_view_page = 0;
 static Color colors[MAX_COLORS];
 static int color_count = 0;
 static TextState current_state;
+static char footer_script[MAX_STR_LEN] = {0};
 
 static double page_width = 612.0;   
 static double page_height = 792.0;  
@@ -155,7 +173,6 @@ static char source[MAX_STR_LEN * 20];
 static int source_pos = 0;
 
 static char header_script[MAX_STR_LEN] = {0};
-static char footer_script[MAX_STR_LEN] = {0};
 
 static LetDef let_defs[64];
 static int let_def_count = 0;
@@ -169,6 +186,8 @@ static int let_def_count = 0;
 typedef struct {
     StreamBuffer pages[MAX_PAGES];
     int current_page;
+int total_pages;
+int disable_pagebreaks;
 } PdfContext;
 
 static Node* parse_element(void);
@@ -176,6 +195,8 @@ static Node* parse_typst_string(const char* input_str);
 static void parse_let_directive(void);
 static void render_node(PdfContext* ctx, Node* n, double* y, double max_w, double start_x);
 static double measure_node_height(Node* n, double max_w);
+void sanitize_utf8_to_winansi(char* dest, const char* src, size_t max_len);
+static void parse_inline_runs(const char* in, TextState base_state, TextRun runs[], int* run_count);
 
 /* =========================================
    IN-MEMORY STREAM BUFFER HELPERS
@@ -368,29 +389,131 @@ static int extract_bracket_content(char* dest, int max_len) {
     return 1;
 }
 
-static int extract_param_value(const char* params, const char* key, char* value, int max_len) {
-    const char* p = strstr(params, key);
-    if (!p) return 0;
-    p += strlen(key);
-    while (*p == ' ' || *p == ':' || *p == '=') p++;
-    int i = 0, depth_p = 0, depth_b = 0, depth_bk = 0;
-    while (*p && i < max_len - 1) {
-        if (*p == '(') depth_p++;
-        else if (*p == ')') { if (depth_p == 0) break; depth_p--; }
-        else if (*p == '{') depth_b++;
-        else if (*p == '}') { if (depth_b == 0) break; depth_b--; }
-        else if (*p == '[') depth_bk++;
-        else if (*p == ']') { if (depth_bk == 0) break; depth_bk--; }
-        else if (*p == ',' && depth_p == 0 && depth_b == 0 && depth_bk == 0) break;
-        value[i++] = *p++;
+static void unwrap_content_markup(char* script) {
+    int changed = 1;
+    while (changed) {
+        changed = 0;
+        char* p = script;
+        while (*p && isspace((unsigned char)*p)) p++;
+        
+        // 1. Strip enclosing [...] brackets
+        if (*p == '[') {
+            p++;
+            size_t len = strlen(p);
+            while (len > 0 && isspace((unsigned char)p[len - 1])) len--;
+            if (len > 0 && p[len - 1] == ']') {
+                p[len - 1] = '\0';
+                memmove(script, p, len);
+                changed = 1;
+                continue;
+            }
+        }
+        
+        // 2. Strip leading "context" keyword
+        if (strncmp(p, "context", 7) == 0 && isspace((unsigned char)p[7])) {
+            p += 7;
+            while (*p && isspace((unsigned char)*p)) p++;
+            memmove(script, p, strlen(p) + 1);
+            changed = 1;
+            continue;
+        }
+        
+        // 3. Strip #text(...) or #align(...) function calls
+        char* start = p;
+        if (*start == '#') start++;
+        if (strncmp(start, "text", 4) == 0 || strncmp(start, "align", 5) == 0) {
+            char* q = start + (strncmp(start, "text", 4) == 0 ? 4 : 5);
+            while (*q && isspace((unsigned char)*q)) q++;
+            if (*q == '(') {
+                int depth = 1;
+                q++;
+                while (*q && depth > 0) {
+                    if (*q == '(') depth++;
+                    else if (*q == ')') depth--;
+                    q++;
+                }
+                while (*q && isspace((unsigned char)*q)) q++;
+                memmove(script, q, strlen(q) + 1);
+                changed = 1;
+                continue;
+            }
+        }
     }
-    while (i > 0 && isspace((unsigned char)value[i-1])) i--;
-    value[i] = '\0';
-    if (value[0] == '"' || value[0] == '\'') {
-        memmove(value, value + 1, i); i--;
-        if (i > 0 && (value[i-1] == '"' || value[i-1] == '\'')) value[i-1] = '\0';
+    
+    // 4. Strip all remaining leading/trailing whitespace and newlines
+    char* p = script;
+    while (*p && isspace((unsigned char)*p)) p++;
+    size_t len = strlen(p);
+    while (len > 0 && isspace((unsigned char)p[len - 1])) len--;
+    p[len] = '\0';
+    if (p != script) {
+        memmove(script, p, len + 1);
     }
-    return 1;
+}
+
+static void strip_quotes(char* str) {
+    if (!str) return;
+    unwrap_content_markup(str);
+    size_t len = strlen(str);
+    if (len >= 2 && ((str[0] == '"' && str[len-1] == '"') || (str[0] == '\'' && str[len-1] == '\''))) {
+        memmove(str, str + 1, len - 2);
+        str[len - 2] = '\0';
+    }
+}
+
+static int extract_param_value(const char* params, const char* key, char* out_val, size_t max_len) {
+    const char* p = params;
+    size_t key_len = strlen(key);
+
+    while (*p) {
+        while (*p && isspace((unsigned char)*p)) p++;
+        if (strncmp(p, key, key_len) == 0) {
+            const char* after_key = p + key_len;
+            while (*after_key && isspace((unsigned char)*after_key)) after_key++;
+            if (*after_key == ':') {
+                p = after_key + 1;
+                while (*p && isspace((unsigned char)*p)) p++;
+                
+                size_t idx = 0;
+                int paren_depth = 0, bracket_depth = 0;
+                int started_with_bracket = (*p == '[');
+                
+                while (*p) {
+                    if (*p == '(') paren_depth++;
+                    else if (*p == ')') paren_depth--;
+                    else if (*p == '[') bracket_depth++;
+                    else if (*p == ']') bracket_depth--;
+                    
+                    if (idx < max_len - 1) out_val[idx++] = *p;
+                    p++;
+                    
+                    // Stop immediately when a starting '[...]' content block closes
+                    if (started_with_bracket && bracket_depth == 0 && paren_depth == 0) {
+                        break;
+                    }
+                    // Otherwise stop at a top-level comma
+                    if (!started_with_bracket && paren_depth == 0 && bracket_depth == 0 && *p == ',') {
+                        break;
+                    }
+                }
+                while (idx > 0 && isspace((unsigned char)out_val[idx - 1])) idx--;
+                out_val[idx] = '\0';
+                return 1;
+            }
+        }
+        
+        // Advance past the next argument at depth 0
+        int p_depth = 0, b_depth = 0;
+        while (*p && (p_depth > 0 || b_depth > 0 || *p != ',')) {
+            if (*p == '(') p_depth++;
+            else if (*p == ')') p_depth--;
+            else if (*p == '[') b_depth++;
+            else if (*p == ']') b_depth--;
+            p++;
+        }
+        if (*p == ',') p++;
+    }
+    return 0;
 }
 
 /* =========================================
@@ -399,17 +522,66 @@ static int extract_param_value(const char* params, const char* key, char* value,
 
 static void parse_inline_runs(const char* in, TextState base_state, TextRun runs[], int* run_count) {
     *run_count = 0;
+    char sanitized_in[MAX_STR_LEN];
+    sanitize_utf8_to_winansi(sanitized_in, in, sizeof(sanitized_in));
+
     TextState state = base_state;
     char buf[MAX_STR_LEN] = {0};
     int bi = 0;
-    const char* p = in;
+    const char* p = sanitized_in;
     
     while (*p) {
-        // Convert UTF-8 bullet character (E2 80 A2) to WinAnsi bullet (0x95)
-        if ((unsigned char)*p == 0xE2 && (unsigned char)*(p+1) == 0x80 && (unsigned char)*(p+2) == 0xA2) {
-            buf[bi++] = '\x95';
-            p += 3;
-            continue;
+        // --- 3-Byte UTF-8 Characters ---
+        if ((unsigned char)*p == 0xE2) {
+            if ((unsigned char)*(p+1) == 0x80) {
+                if ((unsigned char)*(p+2) == 0xA2) { // Bullet (•)
+                    buf[bi++] = '\x95';
+                    p += 3; continue;
+                } else if ((unsigned char)*(p+2) == 0x93) { // En-dash (–)
+                    buf[bi++] = 150; 
+                    p += 3; continue;
+                } else if ((unsigned char)*(p+2) == 0x94) { // Em-dash (—)
+                    buf[bi++] = 151; 
+                    p += 3; continue;
+                }
+            } else if ((unsigned char)*(p+1) == 0x84 && (unsigned char)*(p+2) == 0xA2) { // Trademark (™)
+                buf[bi++] = 153; // Fixed from '\x99' to prevent signed char issues
+                p += 3; continue;
+            }
+        }
+
+        // --- 2-Byte UTF-8 Characters ---
+        if ((unsigned char)*p == 0xC2) {
+            if ((unsigned char)*(p+1) == 0xA9) { // Copyright (©)
+                buf[bi++] = 169;
+                p += 2; continue;
+            } else if ((unsigned char)*(p+1) == 0xAE) { // Registered (®)
+                buf[bi++] = 174;
+                p += 2; continue;
+            } else if ((unsigned char)*(p+1) == 0xB0) { // Degree (°)
+                buf[bi++] = 176;
+                p += 2; continue;
+            } else if ((unsigned char)*(p+1) == 0xB2) { // Superscript 2 (²)
+                buf[bi++] = 178;
+                p += 2; continue;
+            } else if ((unsigned char)*(p+1) == 0xB7) { // Middle dot (·) - prevents 'Â' bug
+                buf[bi++] = 183;
+                p += 2; continue;
+            }
+        }
+
+        // --- Literal ASCII Auto-Conversions ---
+        if (strncmp(p, "(R)", 3) == 0 || strncmp(p, "(r)", 3) == 0) {
+            buf[bi++] = 174; // ®
+            p += 3; continue;
+        }
+        if (strncmp(p, "(C)", 3) == 0 || strncmp(p, "(c)", 3) == 0) {
+            buf[bi++] = 169; // ©
+            p += 3; continue;
+        }
+        if (strncmp(p, "(TM)", 4) == 0 || strncmp(p, "(tm)", 4) == 0) {
+            buf[bi++] = 153; // ™
+            p += 4; continue;
         }
 
         if (*p == '\\' && (*(p+1) == ' ' || *(p+1) == '\n' || *(p+1) == '\0')) {
@@ -640,16 +812,99 @@ static void parse_set_directive(void) {
         params[pi] = '\0';
 
         char val[MAX_STR_LEN];
-        if (extract_param_value(params, "margin", val, sizeof(val))) {
-            char mval[32];
-            if (extract_param_value(val, "x", mval, sizeof(mval))) {
-                margin_left = parse_size(mval); margin_right = parse_size(mval);
+        if (extract_param_value(params, "paper", val, sizeof(val))) {
+            if (strstr(val, "us-letter") || strstr(val, "letter")) {
+                page_width = 612.0; page_height = 792.0;
+            } else if (strstr(val, "a4")) {
+                page_width = 595.28; page_height = 841.89;
             }
-            if (extract_param_value(val, "top", mval, sizeof(mval))) margin_top = parse_size(mval);
-            if (extract_param_value(val, "bottom", mval, sizeof(mval))) margin_bottom = parse_size(mval);
         }
-        if (extract_param_value(params, "header", header_script, sizeof(header_script))) {}
-        if (extract_param_value(params, "footer", footer_script, sizeof(footer_script))) {}
+        
+        if (extract_param_value(params, "margin", val, sizeof(val))) {
+            // Remove enclosing parentheses from margin value
+            char margin_inner[MAX_STR_LEN];
+            if (val[0] == '(') {
+                const char* start = val + 1;
+                char* end = strrchr(val, ')');
+                if (end) {
+                    size_t len = end - start;
+                    strncpy(margin_inner, start, len);
+                    margin_inner[len] = '\0';
+                } else {
+                    strcpy(margin_inner, val);
+                }
+            } else {
+                strcpy(margin_inner, val);
+            }
+            
+            char mval[64];
+            if (extract_param_value(margin_inner, "x", mval, sizeof(mval))) {
+                margin_left = parse_size(mval);
+                margin_right = parse_size(mval);
+            }
+            if (extract_param_value(margin_inner, "left", mval, sizeof(mval))) {
+                margin_left = parse_size(mval);
+            }
+            if (extract_param_value(margin_inner, "right", mval, sizeof(mval))) {
+                margin_right = parse_size(mval);
+            }
+            if (extract_param_value(margin_inner, "top", mval, sizeof(mval))) {
+                margin_top = parse_size(mval);
+            }
+            if (extract_param_value(margin_inner, "bottom", mval, sizeof(mval))) {
+                margin_bottom = parse_size(mval);
+            }
+        }
+
+        char header_raw[MAX_STR_LEN];
+        if (extract_param_value(params, "header", header_raw, sizeof(header_raw))) {
+            strncpy(header_script, header_raw, sizeof(header_script) - 1);
+            header_script[sizeof(header_script) - 1] = '\0';
+
+            unwrap_content_markup(header_script);
+
+            char* counter_pos;
+            while ((counter_pos = strstr(header_script, "#counter(page).display()")) != NULL) {
+                memmove(counter_pos + 2, counter_pos + 24, strlen(counter_pos + 24) + 1);
+                counter_pos[0] = '%';
+                counter_pos[1] = 'd';
+            }
+            while ((counter_pos = strstr(header_script, "counter(page).display()")) != NULL) {
+                memmove(counter_pos + 2, counter_pos + 23, strlen(counter_pos + 23) + 1);
+                counter_pos[0] = '%';
+                counter_pos[1] = 'd';
+            }
+        }
+
+        char footer_raw[MAX_STR_LEN];
+        if (extract_param_value(params, "footer", footer_raw, sizeof(footer_raw))) {
+            char* p = footer_raw;
+            while (*p && isspace((unsigned char)*p)) p++;
+            if (strncmp(p, "context", 7) == 0) {
+                p += 7;
+                while (*p && isspace((unsigned char)*p)) p++;
+            }
+            if (*p == '[') {
+                p++;
+                size_t len = strlen(p);
+                while (len > 0 && isspace((unsigned char)p[len - 1])) len--;
+                if (len > 0 && p[len - 1] == ']') p[len - 1] = '\0';
+            }
+            strncpy(footer_script, p, sizeof(footer_script) - 1);
+            footer_script[sizeof(footer_script) - 1] = '\0';
+
+            char* counter_pos;
+            while ((counter_pos = strstr(footer_script, "#counter(page).display()")) != NULL) {
+                memmove(counter_pos + 2, counter_pos + 24, strlen(counter_pos + 24) + 1);
+                counter_pos[0] = '%';
+                counter_pos[1] = 'd';
+            }
+            while ((counter_pos = strstr(footer_script, "counter(page).display()")) != NULL) {
+                memmove(counter_pos + 2, counter_pos + 23, strlen(counter_pos + 23) + 1);
+                counter_pos[0] = '%';
+                counter_pos[1] = 'd';
+            }
+        }
         return;
     }
     if (match_str("#set text(")) {
@@ -732,16 +987,106 @@ static Node* parse_line(void) {
     return l;
 }
 
+static void draw_pdf_rounded_rect(PdfContext* ctx, double x, double y, double w, double h, double radius, Color fill_c, int has_fill, int has_stroke, Color stroke_c, double stroke_w) {
+    if (!ctx || (ctx->current_page < 0) || (ctx->current_page >= MAX_PAGES)) return;
+    StreamBuffer* sb = &ctx->pages[ctx->current_page];
+
+    #ifdef _WIN32
+    if (dl_count < 32768) {
+        DLItem* it = &dl_items[dl_count++];
+        it->type = DL_RECT;
+        it->page = ctx->current_page;
+        it->x = x;
+        it->y = y - h;
+        it->w = w;
+        it->h = h;
+        it->c = has_fill ? fill_c : (Color){255, 255, 255, "none"};
+        it->stroke_c = has_stroke ? stroke_c : (Color){0, 0, 0, "none"};
+        it->stroke_w = has_stroke ? stroke_w : 0;
+    }
+    #endif
+
+    double r = radius;
+    if (r > w / 2.0) r = w / 2.0;
+    if (r > h / 2.0) r = h / 2.0;
+
+    // Aggressive threshold: force sharp rectangle operators for r <= 0.5
+    if (r <= 0.5) {
+        if (has_fill && has_stroke) {
+            sb_printf(sb, "%.3f %.3f %.3f rg\n", fill_c.r / 255.0, fill_c.g / 255.0, fill_c.b / 255.0);
+            sb_printf(sb, "%.3f %.3f %.3f RG %.2f w\n", stroke_c.r / 255.0, stroke_c.g / 255.0, stroke_c.b / 255.0, stroke_w);
+            sb_printf(sb, "%.2f %.2f %.2f %.2f re B\n0 0 0 RG\n", x, y - h, w, h);
+        } else if (has_fill) {
+            sb_printf(sb, "%.3f %.3f %.3f rg\n", fill_c.r / 255.0, fill_c.g / 255.0, fill_c.b / 255.0);
+            sb_printf(sb, "%.2f %.2f %.2f %.2f re f\n", x, y - h, w, h);
+        } else if (has_stroke) {
+            sb_printf(sb, "%.3f %.3f %.3f RG %.2f w\n", stroke_c.r / 255.0, stroke_c.g / 255.0, stroke_c.b / 255.0, stroke_w);
+            sb_printf(sb, "%.2f %.2f %.2f %.2f re S\n0 0 0 RG\n", x, y - h, w, h);
+        }
+        return;
+    }
+
+    double k = 0.5522847498 * r;
+    double x0 = x;
+    double y0 = y - h;
+    double x1 = x + w;
+    double y1 = y;
+
+    if (has_fill) {
+        sb_printf(sb, "%.3f %.3f %.3f rg\n", fill_c.r / 255.0, fill_c.g / 255.0, fill_c.b / 255.0);
+    }
+    if (has_stroke) {
+        sb_printf(sb, "%.3f %.3f %.3f RG %.2f w\n", stroke_c.r / 255.0, stroke_c.g / 255.0, stroke_c.b / 255.0, stroke_w);
+    }
+
+    // Construct single continuous path with cubic Bezier corner arcs
+    sb_printf(sb, "%.2f %.2f m\n", x0 + r, y0);
+    sb_printf(sb, "%.2f %.2f l\n", x1 - r, y0);
+    sb_printf(sb, "%.2f %.2f %.2f %.2f %.2f %.2f c\n", x1 - r + k, y0, x1, y0 + r - k, x1, y0 + r);
+    sb_printf(sb, "%.2f %.2f l\n", x1, y1 - r);
+    sb_printf(sb, "%.2f %.2f %.2f %.2f %.2f %.2f c\n", x1, y1 - r + k, x1 - r + k, y1, x1 - r, y1);
+    sb_printf(sb, "%.2f %.2f l\n", x0 + r, y1);
+    sb_printf(sb, "%.2f %.2f %.2f %.2f %.2f %.2f c\n", x0 + r - k, y1, x0, y1 - r + k, x0, y1 - r);
+    sb_printf(sb, "%.2f %.2f l\n", x0, y0 + r);
+    sb_printf(sb, "%.2f %.2f %.2f %.2f %.2f %.2f c\n", x0, y0 + r - k, x0 + r - k, y0, x0 + r, y0);
+    sb_printf(sb, "h ");
+
+    if (has_fill && has_stroke) {
+        sb_printf(sb, "B\n");
+    } else if (has_fill) {
+        sb_printf(sb, "f\n");
+    } else if (has_stroke) {
+        sb_printf(sb, "S\n");
+    } else {
+        sb_printf(sb, "n\n");
+    }
+
+    if (has_stroke) {
+        sb_printf(sb, "0 0 0 RG\n");
+    }
+}
+
 static Node* parse_block_node(NodeType type) {
     Node* b = alloc_node(type);
     if (!b) return NULL;
+
+    // 1. Explicitly initialize defaults immediately after allocation
+    b->radius = 0.0;
+    b->fill_color = (Color){255, 255, 255, "none"};
+
+    // 2. Match tag names (#rect, #box, #block, etc.)
     if (type == NODE_RECT) {
-        if (strncmp(&source[source_pos], "#rect", 5) == 0) match_str("#rect"); else match_str("rect");
+        if (strncmp(&source[source_pos], "#rect", 5) == 0) match_str("#rect");
+        else if (strncmp(&source[source_pos], "#box", 4) == 0) match_str("#box");
+        else if (strncmp(&source[source_pos], "box", 3) == 0) match_str("box");
+        else match_str("rect");
     } else {
-        if (strncmp(&source[source_pos], "#block", 6) == 0) match_str("#block"); else match_str("block");
+        if (strncmp(&source[source_pos], "#block", 6) == 0) match_str("#block");
+        else match_str("block");
     }
     skip_whitespace_and_comments();
     
+    // 3. Declare and extract parameter string from (...)
     char param[MAX_STR_LEN] = {0}; 
     int expects_closing_paren = 0;
     
@@ -759,13 +1104,42 @@ static Node* parse_block_node(NodeType type) {
         }
         param[pi] = '\0';
     }
+
+    // 4. Parse individual parameters safely
     char val[MAX_STR_LEN];
-    if (extract_param_value(param, "fill", val, sizeof(val))) b->fill_color = get_color(val);
-    if (extract_param_value(param, "stroke", val, sizeof(val))) {
-        b->has_stroke = 1; b->stroke_color = get_color(val); b->stroke_width = 0.5;
+
+    val[0] = '\0';
+    if (extract_param_value(param, "fill", val, sizeof(val)) && val[0] != '\0') {
+        b->fill_color = get_color(val);
     }
-    if (extract_param_value(param, "inset", val, sizeof(val))) b->inset = parse_size(val);
-    if (extract_param_value(param, "width", val, sizeof(val))) {
+
+    val[0] = '\0';
+    if (extract_param_value(param, "stroke", val, sizeof(val)) && val[0] != '\0') {
+        b->has_stroke = 1;
+        char* plus = strchr(val, '+');
+        if (plus) {
+            b->stroke_width = atof(val);
+            b->stroke_color = get_color(plus + 1);
+        } else {
+            b->stroke_width = 0.5;
+            b->stroke_color = get_color(val);
+        }
+    }
+
+    val[0] = '\0';
+    if (extract_param_value(param, "inset", val, sizeof(val)) && val[0] != '\0') {
+        b->inset = parse_size(val);
+    }
+
+    if (param[0] != '\0' && strstr(param, "radius") != NULL) {
+        val[0] = '\0';
+        if (extract_param_value(param, "radius", val, sizeof(val)) && val[0] != '\0') {
+            b->radius = parse_size(val);
+        }
+    }
+
+    val[0] = '\0';
+    if (extract_param_value(param, "width", val, sizeof(val)) && val[0] != '\0') {
         if (strstr(val, "%")) {
             b->width = atof(val) / 100.0;
             b->has_width = 2; 
@@ -775,6 +1149,7 @@ static Node* parse_block_node(NodeType type) {
         }
     }
 
+    // 5. Parse child content [...]
     skip_whitespace_and_comments();
     if (source[source_pos] == '[') {
         int start = source_pos + 1;
@@ -823,6 +1198,8 @@ static Node* parse_table_or_grid(NodeType type) {
             if (depth == 1 && (source[source_pos] == '[' || 
                               strncmp(&source[source_pos], "rect(", 5) == 0 ||
                               strncmp(&source[source_pos], "#rect(", 6) == 0 ||
+                              strncmp(&source[source_pos], "box(", 4) == 0 ||
+                              strncmp(&source[source_pos], "#box(", 5) == 0 ||
                               strncmp(&source[source_pos], "block(", 6) == 0 ||
                               strncmp(&source[source_pos], "#block(", 7) == 0 ||
                               strncmp(&source[source_pos], "align(", 6) == 0 ||
@@ -910,8 +1287,9 @@ static Node* parse_table_or_grid(NodeType type) {
         if (strstr(val, "calc.even") || strstr(val, "row") || strstr(val, "col-accent")) {
             t->alt_rows = 1;
             t->header_fill = get_color("col-accent");
+            // Fixed zebra stripe colors so alternating rows have distinct backgrounds
             t->stripe_fill_1 = (Color){255, 255, 255, "white"};
-            t->stripe_fill_2 = (Color){255, 255, 255, "white"};
+            t->stripe_fill_2 = (Color){247, 250, 252, "gray_100"};
         } else {
             t->fill_color = get_color(val);
         }
@@ -1036,7 +1414,6 @@ static Node* parse_element(void) {
         return v;
     }
 
-    // Corrected Bullet List Handling: Writes actual 0x95 bullet character instead of literal string "\x95"
     if (source[source_pos] == '-' && isspace((unsigned char)source[source_pos+1])) {
         source_pos += 2;
         Node* p = alloc_node(NODE_PARAGRAPH);
@@ -1054,7 +1431,6 @@ static Node* parse_element(void) {
         return p;
     }
 
-    // Custom #let function / macro calls
     if (source[source_pos] == '#') {
         int p = source_pos + 1;
         char name[64] = {0};
@@ -1108,7 +1484,121 @@ static Node* parse_element(void) {
             }
         }
 
-        // T-Score Bar Chart Component
+        if (strcmp(name, "pie-chart") == 0) {
+            source_pos = p;
+            skip_whitespace_and_comments();
+            char params[MAX_STR_LEN] = {0};
+            if (source[source_pos] == '(') {
+                source_pos++;
+                int pi = 0, depth = 1;
+                while (source[source_pos] && depth > 0) {
+                    if (source[source_pos] == '(') depth++;
+                    else if (source[source_pos] == ')') depth--;
+                    if (depth > 0 && pi < MAX_STR_LEN - 1) params[pi++] = source[source_pos];
+                    source_pos++;
+                }
+                params[pi] = '\0';
+            }
+            Node* chart = alloc_node(NODE_PIE_CHART);
+            if (!chart) return NULL;
+            
+            chart->chart_title[0] = '\0';
+            extract_param_value(params, "title", chart->chart_title, sizeof(chart->chart_title));
+            unwrap_content_markup(chart->chart_title);
+            
+            const char* ptr = params;
+            chart->chart_count = 0;
+            while (*ptr && chart->chart_count < 8) {
+                ptr = strstr(ptr, "(\"");
+                if (!ptr) break;
+                ptr += 2;
+                int i = 0;
+                while (*ptr && *ptr != '"' && i < 31) {
+                    chart->chart_labels[chart->chart_count][i++] = *ptr++;
+                }
+                chart->chart_labels[chart->chart_count][i] = '\0';
+                
+                while (*ptr && *ptr != ',') ptr++; 
+                if (*ptr == ',') ptr++;
+                while (*ptr && isspace((unsigned char)*ptr)) ptr++;
+                
+                chart->chart_scores[chart->chart_count] = atof(ptr);
+                chart->chart_count++;
+            }
+            return chart;
+        }
+        if (strcmp(name, "line-chart") == 0) {
+            source_pos = p;
+            skip_whitespace_and_comments();
+            char params[MAX_STR_LEN] = {0};
+            if (source[source_pos] == '(') {
+                source_pos++;
+                int pi = 0, depth = 1;
+                while (source[source_pos] && depth > 0) {
+                    if (source[source_pos] == '(') depth++;
+                    else if (source[source_pos] == ')') depth--;
+                    if (depth > 0 && pi < MAX_STR_LEN - 1) params[pi++] = source[source_pos];
+                    source_pos++;
+                }
+                params[pi] = '\0';
+            }
+            Node* chart = alloc_node(NODE_LINE_CHART);
+            if (!chart) return NULL;
+            
+            chart->chart_title[0] = '\0';
+            chart->chart_x_label[0] = '\0';
+            chart->chart_y_label[0] = '\0';
+            strcpy(chart->chart_color, "#2563eb");
+            chart->chart_trend_line = 0;
+            
+            if (extract_param_value(params, "title", chart->chart_title, sizeof(chart->chart_title))) {
+                strip_quotes(chart->chart_title);
+                char clean[128]; int ci = 0;
+                for (int i = 0; chart->chart_title[i]; i++) {
+                    if (chart->chart_title[i] != '*') clean[ci++] = chart->chart_title[i];
+                }
+                clean[ci] = '\0';
+                strcpy(chart->chart_title, clean);
+            }
+            
+            if (extract_param_value(params, "x-label", chart->chart_x_label, sizeof(chart->chart_x_label))) {
+                strip_quotes(chart->chart_x_label);
+            }
+
+            if (extract_param_value(params, "y-label", chart->chart_y_label, sizeof(chart->chart_y_label))) {
+                strip_quotes(chart->chart_y_label);
+            }
+
+            if (extract_param_value(params, "color", chart->chart_color, sizeof(chart->chart_color))) {
+                strip_quotes(chart->chart_color);
+            }
+
+            char tl_buf[32] = {0};
+            if (extract_param_value(params, "trend-line", tl_buf, sizeof(tl_buf))) {
+                if (strstr(tl_buf, "true")) chart->chart_trend_line = 1;
+            }
+
+            const char* ptr = params;
+            chart->chart_count = 0;
+            while (*ptr && chart->chart_count < 8) {
+                ptr = strstr(ptr, "(\"");
+                if (!ptr) break;
+                ptr += 2;
+                int i = 0;
+                while (*ptr && *ptr != '"' && i < 31) {
+                    chart->chart_labels[chart->chart_count][i++] = *ptr++;
+                }
+                chart->chart_labels[chart->chart_count][i] = '\0';
+                
+                while (*ptr && *ptr != ',') ptr++; 
+                if (*ptr == ',') ptr++;
+                while (*ptr && isspace((unsigned char)*ptr)) ptr++;
+                
+                chart->chart_scores[chart->chart_count] = atof(ptr);
+                chart->chart_count++;
+            }
+            return chart;
+        }
         if (strcmp(name, "tscore-bar-chart") == 0) {
             source_pos = p;
             skip_whitespace_and_comments();
@@ -1158,7 +1648,6 @@ static Node* parse_element(void) {
             return chart;
         }
 
-        // Longitudinal BMD Trend Component
         if (strcmp(name, "bmd-trend-chart") == 0) {
             source_pos = p;
             skip_whitespace_and_comments();
@@ -1189,21 +1678,31 @@ static Node* parse_element(void) {
     }
 
     if (strncmp(&source[source_pos], "#line", 5) == 0 || strncmp(&source[source_pos], "line(", 5) == 0) return parse_line();
-    if (strncmp(&source[source_pos], "#rect", 5) == 0 || strncmp(&source[source_pos], "rect(", 5) == 0) return parse_block_node(NODE_RECT);
+    if (strncmp(&source[source_pos], "#rect", 5) == 0 || strncmp(&source[source_pos], "rect(", 5) == 0 ||
+        strncmp(&source[source_pos], "#box", 4) == 0  || strncmp(&source[source_pos], "box(", 4) == 0) return parse_block_node(NODE_RECT);
     if (strncmp(&source[source_pos], "#block", 6) == 0 || strncmp(&source[source_pos], "block(", 6) == 0) return parse_block_node(NODE_BLOCK);
     if (strncmp(&source[source_pos], "#grid", 5) == 0 || strncmp(&source[source_pos], "grid(", 5) == 0) return parse_table_or_grid(NODE_GRID);
     if (strncmp(&source[source_pos], "#table", 6) == 0 || strncmp(&source[source_pos], "table(", 6) == 0) return parse_table_or_grid(NODE_TABLE);
 
-    if (strncmp(&source[source_pos], "#align(", 7) == 0 || strncmp(&source[source_pos], "#pad(", 5) == 0) {
+    if (strncmp(&source[source_pos], "#align(", 7) == 0 || strncmp(&source[source_pos], "align(", 6) == 0 || strncmp(&source[source_pos], "#pad(", 5) == 0) {
         Node* b = alloc_node(NODE_BLOCK);
         if (!b) return NULL;
-        if (strncmp(&source[source_pos], "#align(", 7) == 0) {
-            if (strstr(&source[source_pos], "center")) b->align = 1;
-            else if (strstr(&source[source_pos], "right")) b->align = 2;
+        
+        if (strncmp(&source[source_pos], "#align(", 7) == 0 || strncmp(&source[source_pos], "align(", 6) == 0) {
+            char param_buf[128] = {0};
+            int pi = 0;
+            int tmp_pos = source_pos;
+            while (source[tmp_pos] && source[tmp_pos] != ')' && source[tmp_pos] != '\n' && pi < 127) {
+                param_buf[pi++] = source[tmp_pos++];
+            }
+            if (strstr(param_buf, "center")) b->align = 1;
+            else if (strstr(param_buf, "right")) b->align = 2;
         }
+        
         while (source[source_pos] && source[source_pos] != ')' && source[source_pos] != '\n') source_pos++;
         if (source[source_pos] == ')') source_pos++;
         skip_whitespace_and_comments();
+        
         if (source[source_pos] == '[') {
             int start = source_pos + 1;
             int depth = 1; source_pos++;
@@ -1270,8 +1769,10 @@ static void pdf_escape(const char* in, char* out, int max) {
 
 static void pdf_draw_text_run(StreamBuffer* sb, const char* text, double x, double y,
                               double font_size, int is_bold, int is_italic, Color text_color) {
+    char sanitized[MAX_STR_LEN];
+    sanitize_utf8_to_winansi(sanitized, text, sizeof(sanitized));
     char escaped[MAX_STR_LEN];
-    pdf_escape(text, escaped, sizeof(escaped));
+    pdf_escape(sanitized, escaped, sizeof(escaped));
     
     #ifdef _WIN32
     if (dl_count < 32768) {
@@ -1357,7 +1858,15 @@ static double get_char_width(char c, double font_size, int is_bold) {
         ['i'] = 222, ['j'] = 222, ['k'] = 500, ['l'] = 222, ['m'] = 833, ['n'] = 556, ['o'] = 556, ['p'] = 556,
         ['q'] = 556, ['r'] = 333, ['s'] = 500, ['t'] = 278, ['u'] = 556, ['v'] = 500, ['w'] = 722, ['x'] = 500,
         ['y'] = 500, ['z'] = 500, ['{'] = 333, ['|'] = 260, ['}'] = 333, ['~'] = 584,
-        [0x95] = 350 // Explicit width for bullet character
+        [0x95] = 350, // Bullet (•)
+        [0x99] = 600, // Trademark (™)
+        [150]  = 500, // En-dash (–)
+        [151]  = 1000,// Em-dash (—)
+        [169]  = 600, // Copyright (©)
+        [174]  = 600, // Registered (®)
+        [176]  = 333, // Degree (°)
+        [178]  = 333, // Superscript 2 (²)
+        [183]  = 278  // Middle dot (·)
     };
     unsigned char uc = (unsigned char)c;
     double width = (w[uc] > 0 ? w[uc] : 500) / 1000.0 * font_size;
@@ -1571,11 +2080,40 @@ static double measure_node_height(Node* n, double max_w) {
             }
             return total_h;
         }
+        case NODE_PIE_CHART: 
+            return 260.0;
+        case NODE_LINE_CHART:
+            return 225.0;
         case NODE_TSCORE_CHART:
         case NODE_BMD_CHART:
             return 105.0;
         default: return 16.0;
     }
+}
+
+// Translates raw UTF-8 sequences to WinAnsi codes for PDF compatibility
+void sanitize_utf8_to_winansi(char* dest, const char* src, size_t max_len) {
+    size_t i = 0, j = 0;
+    while (src && src[i] && j < max_len - 1) {
+        // Handle Em-dash and En-dash
+        if ((unsigned char)src[i] == 0xE2 && (unsigned char)src[i+1] == 0x80) {
+            if ((unsigned char)src[i+2] == 0x93) { dest[j++] = (char)150; i+=3; continue; } // – (En-dash)
+            if ((unsigned char)src[i+2] == 0x94) { dest[j++] = (char)151; i+=3; continue; } // — (Em-dash)
+        }
+        // Handle Trademark (™ = E2 84 A2)
+        if ((unsigned char)src[i] == 0xE2 && (unsigned char)src[i+1] == 0x84 && (unsigned char)src[i+2] == 0xA2) {
+            dest[j++] = (char)153; i+=3; continue; // ™ (Trademark)
+        }
+        // Handle cm², degrees, copyright, registered
+        if ((unsigned char)src[i] == 0xC2) {
+            if ((unsigned char)src[i+1] == 0xB2) { dest[j++] = (char)178; i+=2; continue; } // ²
+            if ((unsigned char)src[i+1] == 0xB0) { dest[j++] = (char)176; i+=2; continue; } // °
+            if ((unsigned char)src[i+1] == 0xA9) { dest[j++] = (char)169; i+=2; continue; } // ©
+            if ((unsigned char)src[i+1] == 0xAE) { dest[j++] = (char)174; i+=2; continue; } // ®
+        }
+        dest[j++] = src[i++];
+    }
+    dest[j] = '\0';
 }
 
 /* =========================================
@@ -1585,7 +2123,13 @@ static double measure_node_height(Node* n, double max_w) {
 static void render_node(PdfContext* ctx, Node* n, double* y, double max_w, double start_x) {
     if (!n) return;
     
-    // Explicit Pagebreak Support
+    if (n->content) {
+        size_t clen = strlen(n->content);
+        if (clen > 0 && n->content[clen - 1] == ']') {
+            n->content[clen - 1] = '\0';
+        }
+    }
+    
     if (n->type == NODE_PAGEBREAK) {
         if (ctx->current_page < MAX_PAGES - 1) {
             ctx->current_page++;
@@ -1599,17 +2143,25 @@ static void render_node(PdfContext* ctx, Node* n, double* y, double max_w, doubl
         return;
     }
 
-    // Implicit Page Overflow Support
     if (*y < margin_bottom + 20.0) {
-        if (ctx->current_page < MAX_PAGES - 1) {
-            ctx->current_page++;
-            #ifdef _WIN32
-            current_render_page = ctx->current_page;
-            if (current_render_page > max_page_num) max_page_num = current_render_page;
-            #endif
-            sb_init(&ctx->pages[ctx->current_page]);
+        // 1. Check if we are allowed to break the page
+        if (!ctx->disable_pagebreaks) {
+            if (ctx->current_page < MAX_PAGES - 1) {
+                ctx->current_page++;
+                
+                #ifdef _WIN32
+                current_render_page = ctx->current_page;
+                if (current_render_page > max_page_num) max_page_num = current_render_page;
+                #endif
+                
+                sb_init(&ctx->pages[ctx->current_page]); // Init new page
+            }
+            
+            // Reset Y to the top of the new page
+            *y = page_height - margin_top; 
         }
-        *y = page_height - margin_top;
+        // 2. If disable_pagebreaks IS true, 
+        // we just bypass this entirely and let it keep rendering where it is.
     }
 
     #define CUR_SB (&ctx->pages[ctx->current_page])
@@ -1618,13 +2170,127 @@ static void render_node(PdfContext* ctx, Node* n, double* y, double max_w, doubl
     double current_x = start_x;
 
     switch (n->type) {
+case NODE_PAGE: {
+    // 1. Render all children of the document onto the pages
+    for (int i = 0; i < n->child_count; i++) {
+        render_node(ctx, n->children[i], y, max_w, start_x);
+    }
+
+    // 2. Overlay Headers and Footers for all generated pages
+    int total_pages = ctx->current_page + 1;
+    int saved_page = ctx->current_page;
+    TextState saved_state = current_state;
+
+    for (int p = 0; p < total_pages; p++) {
+        ctx->current_page = p;
+        #ifdef _WIN32
+        current_render_page = p; // Keep GDI text layout in sync
+        #endif
+
+        if (header_script[0] != '\0') {
+            char fmt[MAX_STR_LEN];
+            char* dst = fmt;
+            const char* src = header_script;
+            size_t rem = sizeof(fmt) - 1;
+            
+            while (*src && rem > 0) {
+                if (strncmp(src, "#counter(page).display()", 24) == 0) {
+                    char num[16];
+                    snprintf(num, sizeof(num), "%d", p + 1);
+                    size_t nlen = strlen(num);
+                    if (nlen <= rem) { strcpy(dst, num); dst += nlen; rem -= nlen; }
+                    src += 24;
+                } else if (strncmp(src, "counter(page).display()", 23) == 0) {
+                    char num[16];
+                    snprintf(num, sizeof(num), "%d", p + 1);
+                    size_t nlen = strlen(num);
+                    if (nlen <= rem) { strcpy(dst, num); dst += nlen; rem -= nlen; }
+                    src += 23;
+                } else if (*src == '%' && *(src+1) == 'd') {
+                    char num[16];
+                    snprintf(num, sizeof(num), "%d", p + 1);
+                    size_t nlen = strlen(num);
+                    if (nlen <= rem) { strcpy(dst, num); dst += nlen; rem -= nlen; }
+                    src += 2;
+                } else {
+                    *dst++ = *src++;
+                    rem--;
+                }
+            }
+            *dst = '\0';
+            
+            Node* h = parse_typst_string(fmt);
+            if (h) {
+                double hy = page_height - (margin_top / 2.0);
+                int old_disable = ctx->disable_pagebreaks;
+                ctx->disable_pagebreaks = 1;
+                render_node(ctx, h, &hy, max_w, start_x);
+                ctx->disable_pagebreaks = old_disable;
+            }
+        }
+
+        if (footer_script[0] != '\0') {
+            char fmt[MAX_STR_LEN];
+            char* dst = fmt;
+            const char* src = footer_script;
+            size_t rem = sizeof(fmt) - 1;
+            
+            while (*src && rem > 0) {
+                if (strncmp(src, "#counter(page).display()", 24) == 0) {
+                    char num[16];
+                    snprintf(num, sizeof(num), "%d", p + 1);
+                    size_t nlen = strlen(num);
+                    if (nlen <= rem) { strcpy(dst, num); dst += nlen; rem -= nlen; }
+                    src += 24;
+                } else if (strncmp(src, "counter(page).display()", 23) == 0) {
+                    char num[16];
+                    snprintf(num, sizeof(num), "%d", p + 1);
+                    size_t nlen = strlen(num);
+                    if (nlen <= rem) { strcpy(dst, num); dst += nlen; rem -= nlen; }
+                    src += 23;
+                } else if (*src == '%' && *(src+1) == 'd') {
+                    char num[16];
+                    snprintf(num, sizeof(num), "%d", p + 1);
+                    size_t nlen = strlen(num);
+                    if (nlen <= rem) { strcpy(dst, num); dst += nlen; rem -= nlen; }
+                    src += 2;
+                } else {
+                    *dst++ = *src++;
+                    rem--;
+                }
+            }
+            *dst = '\0';
+            
+            Node* f = parse_typst_string(fmt);
+            if (f) {
+                double fy = margin_bottom / 2.0;
+                int old_disable = ctx->disable_pagebreaks;
+                ctx->disable_pagebreaks = 1;
+                render_node(ctx, f, &fy, max_w, start_x);
+                ctx->disable_pagebreaks = old_disable;
+            }
+        }
+    }
+
+    // 3. Restore engine state
+    ctx->current_page = saved_page;
+    #ifdef _WIN32
+    current_render_page = saved_page;
+    #endif
+    current_state = saved_state;
+    break;
+}
         case NODE_HEADING: {
-            double h = render_styled_text(CUR_SB, n->content, current_x, *y, render_w, n->font_size, n->align, get_color("#2B6CB0"), 0);
+            char sanitized[512];
+            sanitize_utf8_to_winansi(sanitized, n->content, sizeof(sanitized));
+            double h = render_styled_text(CUR_SB, sanitized, current_x, *y, render_w, n->font_size, n->align, get_color("#2B6CB0"), 0);
             *y -= (h + 8.0);
             break;
         }
         case NODE_PARAGRAPH: {
-            double h = render_styled_text(CUR_SB, n->content, current_x, *y, render_w, n->font_size, n->align, current_state.fill_color, 0);
+            char sanitized[1024];
+            sanitize_utf8_to_winansi(sanitized, n->content, sizeof(sanitized));
+            double h = render_styled_text(CUR_SB, sanitized, current_x, *y, render_w, n->font_size, n->align, current_state.fill_color, 0);
             *y -= h;
             break;
         }
@@ -1679,37 +2345,32 @@ static void render_node(PdfContext* ctx, Node* n, double* y, double max_w, doubl
             double content_h = 0;
             if (n->child_count > 0) {
                 for (int i = 0; i < n->child_count; i++) content_h += measure_node_height(n->children[i], rw - inset*2);
+            } else if (n->content && strlen(n->content) > 0) {
+                char sanitized[512];
+                sanitize_utf8_to_winansi(sanitized, n->content, sizeof(sanitized));
+                content_h = render_styled_text(NULL, sanitized, 0, 0, rw - inset*2, n->font_size, 0, current_state.fill_color, 1);
             } else {
-                content_h = render_styled_text(NULL, n->content, 0, 0, rw - inset*2, n->font_size, 0, current_state.fill_color, 1);
+                content_h = 10.0;
             }
             double total_h = content_h + inset * 2.0;
 
-            #ifdef _WIN32
-            if (dl_count < 32768) {
-                DLItem* it = &dl_items[dl_count++];
-                it->type = DL_RECT;
-                it->page = ctx->current_page;
-                it->x = current_x; it->y = *y - total_h;
-                it->w = rw; it->h = total_h;
-                it->c = n->fill_color;
-                it->stroke_c = n->has_stroke ? n->stroke_color : (Color){0,0,0,"none"};
-                it->stroke_w = n->has_stroke ? n->stroke_width : 0;
-            }
-            #endif
+            int has_fill = (n->fill_color.name && strcmp(n->fill_color.name, "none") != 0 && strcmp(n->fill_color.name, "transparent") != 0);
 
-            sb_printf(CUR_SB, "%.3f %.3f %.3f rg\n", n->fill_color.r/255.0, n->fill_color.g/255.0, n->fill_color.b/255.0);
-            sb_printf(CUR_SB, "%.2f %.2f %.2f %.2f re f\n", current_x, *y - total_h, rw, total_h);
-
-            if (n->has_stroke) {
-                sb_printf(CUR_SB, "%.3f %.3f %.3f RG %.2f w\n", n->stroke_color.r/255.0, n->stroke_color.g/255.0, n->stroke_color.b/255.0, n->stroke_width);
-                sb_printf(CUR_SB, "%.2f %.2f %.2f %.2f re S\n0 0 0 RG\n", current_x, *y - total_h, rw, total_h);
+            // STRICT DISPATCH: Only use rounded rects if radius is explicitly > 0.5
+            if (n->radius > 0.5) {
+                draw_pdf_rounded_rect(ctx, current_x, *y, rw, total_h, n->radius, n->fill_color, has_fill, n->has_stroke, n->stroke_color, n->stroke_width);
+            } else {
+                // FIXED: Arg 7 is 'n->has_stroke', NOT 'has_fill'!
+                draw_pdf_rect(ctx, current_x, *y, rw, total_h, n->fill_color, n->has_stroke, n->stroke_color, n->has_stroke ? n->stroke_width : 0.0);
             }
 
             if (n->child_count > 0) {
                 double child_y = *y - inset;
                 for (int i = 0; i < n->child_count; i++) render_node(ctx, n->children[i], &child_y, rw - inset*2, current_x + inset);
-            } else {
-                render_styled_text(CUR_SB, n->content, current_x + inset, *y - inset, rw - inset*2, n->font_size, 0, current_state.fill_color, 0);
+            } else if (n->content && strlen(n->content) > 0) {
+                char sanitized[512];
+                sanitize_utf8_to_winansi(sanitized, n->content, sizeof(sanitized));
+                render_styled_text(CUR_SB, sanitized, current_x + inset, *y - inset, rw - inset*2, n->font_size, 0, current_state.fill_color, 0);
             }
             *y -= (total_h + 8.0);
             break;
@@ -1738,7 +2399,9 @@ static void render_node(PdfContext* ctx, Node* n, double* y, double max_w, doubl
                         if (cell->child_count > 0) {
                             for (int k = 0; k < cell->child_count; k++) ch += measure_node_height(cell->children[k], actual_widths[c]);
                         } else {
-                            ch = render_styled_text(NULL, cell->content, 0, 0, actual_widths[c], n->font_size, cell->align, current_state.fill_color, 1);
+                            char sanitized[512];
+                            sanitize_utf8_to_winansi(sanitized, cell->content, sizeof(sanitized));
+                            ch = render_styled_text(NULL, sanitized, 0, 0, actual_widths[c], n->font_size, cell->align, current_state.fill_color, 1);
                         }
                         max_row_h = MAX(max_row_h, ch);
                     }
@@ -1751,7 +2414,9 @@ static void render_node(PdfContext* ctx, Node* n, double* y, double max_w, doubl
                             double child_y = *y;
                             for (int k = 0; k < cell->child_count; k++) render_node(ctx, cell->children[k], &child_y, actual_widths[c], cx);
                         } else {
-                            render_styled_text(CUR_SB, cell->content, cx, *y, actual_widths[c], n->font_size, cell->align, current_state.fill_color, 0);
+                            char sanitized[512];
+                            sanitize_utf8_to_winansi(sanitized, cell->content, sizeof(sanitized));
+                            render_styled_text(CUR_SB, sanitized, cx, *y, actual_widths[c], n->font_size, cell->align, current_state.fill_color, 0);
                         }
                     }
                     cx += actual_widths[c] + n->gutter;
@@ -1769,11 +2434,17 @@ static void render_node(PdfContext* ctx, Node* n, double* y, double max_w, doubl
             double avail = render_w - total_fixed;
             double fr_unit = total_fr > 0 ? avail / total_fr : 0;
             double actual_widths[MAX_TABLE_COLS];
+            double total_table_width = 0;
             for (int i = 0; i < n->cell_cols; i++) {
                 actual_widths[i] = n->is_fr[i] ? n->col_widths[i] * fr_unit : n->col_widths[i];
+                total_table_width += actual_widths[i];
             }
 
             double inset = n->inset > 0 ? n->inset : 6.0;
+            double start_y = *y;
+            
+            double* row_y_positions = (double*)malloc((n->cell_rows + 1) * sizeof(double));
+            if (row_y_positions) row_y_positions[0] = start_y;
 
             for (int r = 0; r < n->cell_rows; r++) {
                 double max_row_h = 0;
@@ -1784,7 +2455,9 @@ static void render_node(PdfContext* ctx, Node* n, double* y, double max_w, doubl
                         if (cell->child_count > 0) {
                             for (int k = 0; k < cell->child_count; k++) ch += measure_node_height(cell->children[k], actual_widths[c] - inset*2);
                         } else {
-                            ch = render_styled_text(NULL, cell->content, 0, 0, actual_widths[c] - inset*2, n->font_size, cell->align, current_state.fill_color, 1);
+                            char sanitized[512];
+                            sanitize_utf8_to_winansi(sanitized, cell->content, sizeof(sanitized));
+                            ch = render_styled_text(NULL, sanitized, 0, 0, actual_widths[c] - inset*2, n->font_size, cell->align, current_state.fill_color, 1);
                         }
                         max_row_h = MAX(max_row_h, ch);
                     }
@@ -1792,10 +2465,13 @@ static void render_node(PdfContext* ctx, Node* n, double* y, double max_w, doubl
                 double cell_box_h = max_row_h + inset * 2.0;
 
                 Color row_fill;
-                if (r == 0 && n->alt_rows) row_fill = n->header_fill;
-                else if (r == n->cell_rows - 1 && n->alt_rows) row_fill = get_color("luma(240)");
-                else if (n->alt_rows) row_fill = (r % 2 == 0) ? n->stripe_fill_2 : n->stripe_fill_1;
-                else row_fill = n->fill_color;
+                if (r == 0 && n->alt_rows) {
+                    row_fill = n->header_fill;
+                } else if (n->alt_rows) {
+                    row_fill = (r % 2 == 1) ? n->stripe_fill_1 : n->stripe_fill_2;
+                } else {
+                    row_fill = n->fill_color;
+                }
 
                 double cx = current_x;
                 for (int c = 0; c < n->cell_cols; c++) {
@@ -1809,18 +2485,13 @@ static void render_node(PdfContext* ctx, Node* n, double* y, double max_w, doubl
                         it->x = cx; it->y = *y - cell_box_h;
                         it->w = actual_widths[c]; it->h = cell_box_h;
                         it->c = row_fill;
-                        it->stroke_c = n->has_stroke ? n->stroke_color : (Color){0,0,0,"none"};
-                        it->stroke_w = n->has_stroke ? n->stroke_width : 0;
+                        it->stroke_c = (Color){0,0,0,"none"};
+                        it->stroke_w = 0;
                     }
                     #endif
 
                     sb_printf(CUR_SB, "%.3f %.3f %.3f rg\n", row_fill.r/255.0, row_fill.g/255.0, row_fill.b/255.0);
                     sb_printf(CUR_SB, "%.2f %.2f %.2f %.2f re f\n", cx, *y - cell_box_h, actual_widths[c], cell_box_h);
-
-                    if (n->has_stroke) {
-                        sb_printf(CUR_SB, "%.3f %.3f %.3f RG %.2f w\n", n->stroke_color.r/255.0, n->stroke_color.g/255.0, n->stroke_color.b/255.0, n->stroke_width);
-                        sb_printf(CUR_SB, "%.2f %.2f %.2f %.2f re S\n0 0 0 RG\n", cx, *y - cell_box_h, actual_widths[c], cell_box_h);
-                    }
 
                     if (cell) {
                         Color tc = (r == 0 && n->alt_rows) ? (Color){255,255,255,"white"} : current_state.fill_color;
@@ -1831,15 +2502,247 @@ static void render_node(PdfContext* ctx, Node* n, double* y, double max_w, doubl
                             for (int k = 0; k < cell->child_count; k++) render_node(ctx, cell->children[k], &child_y, actual_widths[c] - inset*2, cx + inset);
                             current_state.fill_color = old_color;
                         } else {
-                            render_styled_text(CUR_SB, cell->content, cx + inset, *y - inset, actual_widths[c] - inset*2, n->font_size, cell->align, tc, 0);
+                            char sanitized[512];
+                            sanitize_utf8_to_winansi(sanitized, cell->content, sizeof(sanitized));
+                            render_styled_text(CUR_SB, sanitized, cx + inset, *y - inset, actual_widths[c] - inset*2, n->font_size, cell->align, tc, 0);
                         }
                     }
                     cx += actual_widths[c];
                 }
                 *y -= cell_box_h;
+                
+                if (row_y_positions) row_y_positions[r + 1] = *y;
             }
+            
+            if (n->has_stroke && row_y_positions) {
+                sb_printf(CUR_SB, "%.3f %.3f %.3f RG %.2f w\n", 
+                          n->stroke_color.r/255.0, n->stroke_color.g/255.0, n->stroke_color.b/255.0, n->stroke_width);
+                sb_printf(CUR_SB, "%.2f %.2f %.2f %.2f re S\n", 
+                          current_x, *y, total_table_width, start_y - *y);
+
+                for (int r = 1; r < n->cell_rows; r++) {
+                    double ry = row_y_positions[r];
+                    sb_printf(CUR_SB, "%.2f %.2f m %.2f %.2f l S\n", current_x, ry, current_x + total_table_width, ry);
+                }
+                
+                double cx = current_x;
+                for (int c = 1; c < n->cell_cols; c++) {
+                    cx += actual_widths[c - 1];
+                    sb_printf(CUR_SB, "%.2f %.2f m %.2f %.2f l S\n", cx, start_y, cx, *y);
+                }
+                sb_printf(CUR_SB, "0 0 0 RG\n");
+            }
+            
+            if (row_y_positions) free(row_y_positions);
             break;
         }
+case NODE_PIE_CHART: {
+    double ch = 260.0;
+    double cx = current_x + 140.0;
+    double cy_center = *y - 120.0;
+    double r = 85.0;
+
+    if (n->chart_title[0] != '\0') {
+        char sanitized[128];
+        sanitize_utf8_to_winansi(sanitized, n->chart_title, sizeof(sanitized));
+        render_styled_text(CUR_SB, sanitized, current_x, *y - 15.0, render_w, n->font_size + 4.0, 1, current_state.fill_color, 0);
+    }
+
+    Color palette[8] = {
+        {37, 99, 235, "blue"}, {22, 163, 74, "green"}, {217, 119, 6, "orange"}, {220, 38, 38, "red"},
+        {124, 58, 237, "purple"}, {6, 182, 212, "cyan"}, {219, 39, 119, "pink"}, {79, 70, 229, "indigo"}
+    };
+
+    double total = 0;
+    for (int i = 0; i < n->chart_count; i++) total += n->chart_scores[i];
+    if (total == 0) total = 1;
+
+    double start_angle = -90.0 * (M_PI / 180.0);
+
+    for (int i = 0; i < n->chart_count; i++) {
+        double slice_angle = (n->chart_scores[i] / total) * 2.0 * M_PI;
+        if (slice_angle < 0.001) continue; 
+        
+        double end_angle = start_angle + slice_angle;
+        Color col = palette[i % 8];
+
+        #ifdef _WIN32
+        if (dl_count < 32768) {
+            DLItem* it = &dl_items[dl_count++];
+            it->type = DL_PIE;
+            it->page = ctx->current_page;
+            it->x = cx - r;
+            it->y = cy_center - r;
+            it->w = r * 2;
+            it->h = r * 2;
+            it->c = col;
+            it->stroke_c = col;
+            it->stroke_w = 0;
+            it->text[0] = '\0';
+            it->font_size = 0;
+            it->is_bold = 0;
+            it->is_italic = 0;
+            it->start_angle = start_angle;
+            it->end_angle = end_angle;
+        }
+        #endif
+
+        sb_printf(CUR_SB, "%.3f %.3f %.3f rg\n", col.r/255.0, col.g/255.0, col.b/255.0);
+        sb_printf(CUR_SB, "1 1 1 RG 1.5 w\n"); 
+        sb_printf(CUR_SB, "%.2f %.2f m\n", cx, cy_center);
+        sb_printf(CUR_SB, "%.2f %.2f l\n", cx + r * cos(start_angle), cy_center - r * sin(start_angle));
+
+        int segments = (int)ceil(slice_angle / (M_PI / 2.0));
+        if (segments == 0) segments = 1;
+        double seg_angle = slice_angle / segments;
+
+        double cur_ang = start_angle;
+        for (int s = 0; s < segments; s++) {
+            double a0 = cur_ang;
+            double a1 = cur_ang + seg_angle;
+            double a = (a1 - a0) / 2.0;
+            double kappa = (4.0 / 3.0) * (1.0 - cos(a)) / sin(a);
+
+            double x1 = cx + r * cos(a1);
+            double y1 = cy_center - r * sin(a1);
+
+            double cp1x = (cx + r * cos(a0)) + kappa * (-r * sin(a0));
+            double cp1y = (cy_center - r * sin(a0)) + kappa * (-r * cos(a0));
+            double cp2x = x1 - kappa * (-r * sin(a1));
+            double cp2y = y1 - kappa * (-r * cos(a1));
+
+            sb_printf(CUR_SB, "%.2f %.2f %.2f %.2f %.2f %.2f c\n", cp1x, cp1y, cp2x, cp2y, x1, y1);
+            cur_ang = a1;
+        }
+
+        sb_printf(CUR_SB, "h B\n"); 
+
+        // Legend
+        double legend_y = (*y - 60.0) - (i * 25.0);
+        double legend_x = current_x + 270.0;
+
+        #ifdef _WIN32
+        if (dl_count < 32768) {
+            DLItem* it = &dl_items[dl_count++];
+            it->type = DL_RECT;
+            it->page = ctx->current_page;
+            it->x = legend_x; it->y = legend_y - 11.0;
+            it->w = 14; it->h = 14;
+            it->c = col; it->stroke_w = 0;
+        }
+        #endif
+        
+        sb_printf(CUR_SB, "%.3f %.3f %.3f rg\n", col.r/255.0, col.g/255.0, col.b/255.0);
+        sb_printf(CUR_SB, "%.2f %.2f 14 14 re f\n", legend_x, legend_y - 11.0);
+
+        char legend_str[128];
+        double pct = (n->chart_scores[i] / total) * 100.0;
+        snprintf(legend_str, sizeof(legend_str), "%s (%g - %.1f%%)", n->chart_labels[i], n->chart_scores[i], pct);
+        
+        Color text_col = {51, 51, 51, "dark_gray"};
+        render_styled_text(CUR_SB, legend_str, legend_x + 25.0, legend_y, 200, 11.0, 0, text_col, 0);
+
+        start_angle = end_angle;
+    }
+
+    *y -= ch;
+    break;
+}
+        case NODE_LINE_CHART: {
+            double top_y = *y;
+            if (n->chart_title[0]) {
+                render_styled_text(&ctx->pages[ctx->current_page], n->chart_title, start_x, top_y, max_w, 12.0, 1, (Color){0,0,0,"black"}, 0);
+                top_y -= 25.0;
+            }
+
+            double plot_top = top_y - 10.0;
+            double plot_bottom = top_y - 140.0;
+            double plot_height = plot_top - plot_bottom;
+
+            double x_start_plot = start_x + (n->chart_y_label[0] ? 60.0 : 45.0);
+            double x_end_plot = start_x + max_w - 20.0;
+            double plot_width = x_end_plot - x_start_plot;
+
+            double raw_max = 0;
+            for (int i = 0; i < n->chart_count; i++) {
+                if (n->chart_scores[i] > raw_max) raw_max = n->chart_scores[i];
+            }
+            double max_val = (raw_max == 0) ? 10.0 : MAX(10.0, ceil(raw_max / 10.0) * 10.0);
+
+            for (int i = 0; i <= 4; i++) {
+                double val = (max_val / 4.0) * (4 - i);
+                double gy = plot_top - (i * (plot_height / 4.0));
+                draw_pdf_line(ctx, x_start_plot, gy, x_end_plot, gy, (Color){229, 231, 235, "grid"}, 0.5);
+
+                char val_str[32];
+                snprintf(val_str, sizeof(val_str), "%.0f", val);
+                pdf_draw_text_run(&ctx->pages[ctx->current_page], val_str, x_start_plot - 22, gy - 3, 8.0, 0, 0, (Color){102,102,102,"gray"});
+            }
+
+            draw_pdf_line(ctx, x_start_plot, plot_bottom, x_end_plot, plot_bottom, (Color){51, 51, 51, "axis"}, 1.5);
+            draw_pdf_line(ctx, x_start_plot, plot_top, x_start_plot, plot_bottom, (Color){51, 51, 51, "axis"}, 1.5);
+
+            if (n->chart_y_label[0]) {
+                pdf_draw_text_run(&ctx->pages[ctx->current_page], n->chart_y_label, start_x + 5.0, plot_bottom + (plot_height / 2.0), 9.0, 0, 0, (Color){51, 51, 51, "label"});
+            }
+            if (n->chart_x_label[0]) {
+                pdf_draw_text_run(&ctx->pages[ctx->current_page], n->chart_x_label, x_start_plot + (plot_width / 2.0) - 20.0, plot_bottom - 32.0, 9.0, 0, 0, (Color){51, 51, 51, "label"});
+            }
+
+            int num_items = n->chart_count;
+            if (num_items > 0) {
+                double slot_width = plot_width / (double)num_items;
+                Color line_c = get_color(n->chart_color);
+
+                double pt_x[16], pt_y[16];
+                for (int i = 0; i < num_items; i++) {
+                    pt_x[i] = x_start_plot + (i * slot_width) + (slot_width / 2.0);
+                    double h = (n->chart_scores[i] / max_val) * plot_height;
+                    pt_y[i] = plot_bottom + h;
+                }
+
+                for (int i = 0; i < num_items - 1; i++) {
+                    draw_pdf_line(ctx, pt_x[i], pt_y[i], pt_x[i+1], pt_y[i+1], line_c, 2.0);
+                }
+
+                for (int i = 0; i < num_items; i++) {
+                    draw_pdf_rect(ctx, pt_x[i] - 2.5, pt_y[i] + 2.5, 5.0, 5.0, line_c, 0, line_c, 0);
+
+                    char val_str[32];
+                    snprintf(val_str, sizeof(val_str), "%.0f", n->chart_scores[i]);
+                    pdf_draw_text_run(&ctx->pages[ctx->current_page], val_str, pt_x[i] - 6.0, pt_y[i] + 6.0, 8.0, 0, 0, line_c);
+
+                    pdf_draw_text_run(&ctx->pages[ctx->current_page], n->chart_labels[i], pt_x[i] - 12.0, plot_bottom - 15.0, 8.0, 0, 0, (Color){102,102,102,"gray"});
+                }
+
+                if (n->chart_trend_line && num_items > 1) {
+                    double sum_x = 0, sum_y = 0, sum_xx = 0, sum_xy = 0;
+                    for (int i = 0; i < num_items; i++) {
+                        sum_x += i;
+                        sum_y += n->chart_scores[i];
+                        sum_xx += i * i;
+                        sum_xy += i * n->chart_scores[i];
+                    }
+                    double denom = (num_items * sum_xx) - (sum_x * sum_x);
+                    if (denom != 0) {
+                        double m = (num_items * sum_xy - sum_x * sum_y) / denom;
+                        double b = (sum_y - m * sum_x) / (double)num_items;
+
+                        double y1_val = b;
+                        double y1_px = plot_bottom + (y1_val / max_val) * plot_height;
+
+                        double y2_val = m * (num_items - 1) + b;
+                        double y2_px = plot_bottom + (y2_val / max_val) * plot_height;
+
+                        draw_pdf_line(ctx, pt_x[0], y1_px, pt_x[num_items - 1], y2_px, (Color){220, 38, 38, "red"}, 1.5);
+                    }
+                }
+            }
+
+            *y = plot_bottom - (n->chart_x_label[0] ? 45.0 : 25.0);
+            break;
+        }
+
         case NODE_TSCORE_CHART: {
             double h = 105.0;
             double top_y = *y;
@@ -1847,7 +2750,9 @@ static void render_node(PdfContext* ctx, Node* n, double* y, double max_w, doubl
 
             char title_str[256];
             snprintf(title_str, sizeof(title_str), "#text(size: 8.5pt, fill: col-primary)[*%s*]", n->chart_title);
-            render_styled_text(CUR_SB, title_str, current_x + 8.0, top_y - 12.0, render_w - 16.0, 8.5, 0, get_color("#1A365D"), 0);
+            char sanitized_title[256];
+            sanitize_utf8_to_winansi(sanitized_title, title_str, sizeof(sanitized_title));
+            render_styled_text(CUR_SB, sanitized_title, current_x + 8.0, top_y - 12.0, render_w - 16.0, 8.5, 0, get_color("#1A365D"), 0);
 
             double px = current_x + 10.0;
             double py_top = top_y - 24.0;
@@ -1867,26 +2772,38 @@ static void render_node(PdfContext* ctx, Node* n, double* y, double max_w, doubl
 
             int cnt = n->chart_count > 0 ? n->chart_count : 5;
             double col_w = pw / cnt;
-            double bar_w = 16.0;
+            double bar_w = MIN(16.0, col_w * 0.6);
 
             for (int i = 0; i < cnt; i++) {
                 double bar_x = px + (i + 0.5) * col_w - bar_w / 2.0;
                 double val = n->chart_scores[i];
-                double zero_y = py_top - ph * 0.125;
-                double score_y = py_top - ph * ((0.5 - val) / 4.0);
-                if (score_y < py_top - ph) score_y = py_top - ph;
-                if (score_y > py_top) score_y = py_top;
+                double zero_y = py_top - ph * 0.375;
+                
+                double clamped_val = val;
+                if (clamped_val > 1.0) clamped_val = 1.0;
+                if (clamped_val < -3.0) clamped_val = -3.0;
+
+                double score_y = py_top - ph * ((1.0 - clamped_val) / 4.0);
+                double top_bar_y = (score_y > zero_y) ? score_y : zero_y;
+                double bar_h = fabs(score_y - zero_y);
+                if (bar_h < 1.0) bar_h = 1.0;
 
                 Color bar_color = (val <= -2.5) ? get_color("#E53E3E") : (val <= -1.0) ? get_color("#DD6B20") : get_color("#38A169");
-                draw_pdf_rect(ctx, bar_x, zero_y, bar_w, score_y - zero_y, bar_color, 0, (Color){0}, 0);
+                draw_pdf_rect(ctx, bar_x, top_bar_y, bar_w, bar_h, bar_color, 0, (Color){0}, 0);
 
                 char score_str[64];
                 snprintf(score_str, sizeof(score_str), "#text(size: 6.5pt)[*%.1f*]", val);
-                render_styled_text(CUR_SB, score_str, bar_x - 4.0, score_y + 8.0, bar_w + 8.0, 6.5, 1, get_color("#1A365D"), 0);
+                double score_text_y = (val >= 0) ? top_bar_y + 8.0 : top_bar_y - bar_h - 2.0;
+                if (score_text_y > py_top - 2.0) score_text_y = py_top - 2.0;
+                if (score_text_y < py_top - ph + 10.0) score_text_y = py_top - ph + 10.0;
+                
+                render_styled_text(CUR_SB, score_str, px + i * col_w, score_text_y, col_w, 6.5, 1, get_color("#1A365D"), 0);
 
                 char label_str[64];
                 snprintf(label_str, sizeof(label_str), "#text(size: 6.5pt)[*%s*]", n->chart_labels[i]);
-                render_styled_text(CUR_SB, label_str, bar_x - 10.0, py_top - ph - 6.0, bar_w + 20.0, 6.5, 1, get_color("#2D3748"), 0);
+                char sanitized_lbl[64];
+                sanitize_utf8_to_winansi(sanitized_lbl, label_str, sizeof(sanitized_lbl));
+                render_styled_text(CUR_SB, sanitized_lbl, px + i * col_w, py_top - ph - 2.0, col_w, 6.5, 1, get_color("#2D3748"), 0);
             }
             *y -= h;
             break;
@@ -1898,7 +2815,9 @@ static void render_node(PdfContext* ctx, Node* n, double* y, double max_w, doubl
 
             char title_str[256];
             snprintf(title_str, sizeof(title_str), "#text(size: 8.5pt, fill: col-primary)[*%s*]", n->chart_title);
-            render_styled_text(CUR_SB, title_str, current_x + 8.0, top_y - 12.0, render_w - 16.0, 8.5, 0, get_color("#1A365D"), 0);
+            char sanitized_title[256];
+            sanitize_utf8_to_winansi(sanitized_title, title_str, sizeof(sanitized_title));
+            render_styled_text(CUR_SB, sanitized_title, current_x + 8.0, top_y - 12.0, render_w - 16.0, 8.5, 0, get_color("#1A365D"), 0);
 
             double px = current_x + 10.0;
             double py_top = top_y - 24.0;
@@ -1934,8 +2853,13 @@ static void render_node(PdfContext* ctx, Node* n, double* y, double max_w, doubl
             char l1_str[128], l2_str[128];
             snprintf(l1_str, sizeof(l1_str), "#text(size: 6.5pt, fill: \"#7B2C2C\")[*2024: %s g/cm²*]", n->chart_v1);
             snprintf(l2_str, sizeof(l2_str), "#text(size: 6.5pt, fill: \"#7B2C2C\")[*2026: %s (%s)*]", n->chart_v2, n->chart_pct);
-            render_styled_text(CUR_SB, l1_str, px + x1 - 70.0, y1 + 4.0, 100.0, 6.5, 0, get_color("#7B2C2C"), 0);
-            render_styled_text(CUR_SB, l2_str, px + x2 + 4.0, y2 - 4.0, 100.0, 6.5, 0, get_color("#7B2C2C"), 0);
+            
+            char sanitized_l1[128], sanitized_l2[128];
+            sanitize_utf8_to_winansi(sanitized_l1, l1_str, sizeof(sanitized_l1));
+            sanitize_utf8_to_winansi(sanitized_l2, l2_str, sizeof(sanitized_l2));
+
+            render_styled_text(CUR_SB, sanitized_l1, px + x1 - 70.0, y1 + 4.0, 100.0, 6.5, 0, get_color("#7B2C2C"), 0);
+            render_styled_text(CUR_SB, sanitized_l2, px + x2 + 4.0, y2 - 4.0, 100.0, 6.5, 0, get_color("#7B2C2C"), 0);
 
             render_styled_text(CUR_SB, "#text(size: 7pt, fill: \"#4A5568\")[Age 20]", px + 4.0, py_top - ph - 8.0, 50.0, 7.0, 0, get_color("#4A5568"), 0);
             render_styled_text(CUR_SB, "#text(size: 7pt, fill: \"#4A5568\")[Age 50]", px + pw * 0.45 - 15.0, py_top - ph - 8.0, 50.0, 7.0, 1, get_color("#4A5568"), 0);
@@ -1949,9 +2873,174 @@ static void render_node(PdfContext* ctx, Node* n, double* y, double max_w, doubl
     #undef CUR_SB
 }
 
-/* =========================================
-   PDF EXPORT ENGINE (IN-MEMORY)
-   ========================================= */
+static void render_page_header(PdfContext* ctx, int page_num, int total_pages) {
+    if (!header_script[0]) return;
+
+    char script_buf[MAX_STR_LEN];
+    char page_str[16];
+    snprintf(page_str, sizeof(page_str), "%d", page_num);
+
+    char* src = header_script;
+    char* dst = script_buf;
+    size_t rem = sizeof(script_buf) - 1;
+
+    // First: Replace #counter(page).display() with page number
+    while (*src && rem > 0) {
+        if (strncmp(src, "#counter(page).display()", 24) == 0) {
+            size_t len = strlen(page_str);
+            if (len <= rem) {
+                memcpy(dst, page_str, len);
+                dst += len;
+                rem -= len;
+            }
+            src += 24;
+        } else if (strncmp(src, "counter(page).display()", 23) == 0) {
+            size_t len = strlen(page_str);
+            if (len <= rem) {
+                memcpy(dst, page_str, len);
+                dst += len;
+                rem -= len;
+            }
+            src += 23;
+        } else {
+            *dst++ = *src++;
+            rem--;
+        }
+    }
+    *dst = '\0';
+
+    // Second: Also replace %d with page number (for C-style format strings)
+    char script_buf2[MAX_STR_LEN];
+    char* src2 = script_buf;
+    char* dst2 = script_buf2;
+    size_t rem2 = sizeof(script_buf2) - 1;
+    
+    while (*src2 && rem2 > 0) {
+        if (*src2 == '%' && *(src2+1) == 'd') {
+            size_t len = strlen(page_str);
+            if (len <= rem2) {
+                memcpy(dst2, page_str, len);
+                dst2 += len;
+                rem2 -= len;
+            }
+            src2 += 2;
+        } else {
+            *dst2++ = *src2++;
+            rem2--;
+        }
+    }
+    *dst2 = '\0';
+
+    int saved_page = ctx->current_page;
+    int saved_disable = ctx->disable_pagebreaks;
+    TextState saved_state = current_state;
+
+    // Set the correct page for BOTH PDF and GDI display list
+    ctx->current_page = page_num - 1;
+    #ifdef _WIN32
+    current_render_page = page_num - 1;
+    #endif
+    ctx->disable_pagebreaks = 1;
+
+    Node* header_node = parse_typst_string(script_buf2);
+    if (header_node) {
+        // Calculate Y position for the header instead of the footer
+        double header_y = page_height - (margin_top / 2.0); 
+        double max_w = page_width - margin_left - margin_right;
+        render_node(ctx, header_node, &header_y, max_w, margin_left);
+    }
+
+    ctx->current_page = saved_page;
+    #ifdef _WIN32
+    current_render_page = saved_page;
+    #endif
+    ctx->disable_pagebreaks = saved_disable;
+    current_state = saved_state;
+}
+
+static void render_page_footer(PdfContext* ctx, int page_num, int total_pages) {
+    if (!footer_script[0]) return;
+
+    char script_buf[MAX_STR_LEN];
+    char page_str[16];
+    snprintf(page_str, sizeof(page_str), "%d", page_num);
+
+    char* src = footer_script;
+    char* dst = script_buf;
+    size_t rem = sizeof(script_buf) - 1;
+
+    // First: Replace #counter(page).display() with page number
+    while (*src && rem > 0) {
+        if (strncmp(src, "#counter(page).display()", 24) == 0) {
+            size_t len = strlen(page_str);
+            if (len <= rem) {
+                memcpy(dst, page_str, len);
+                dst += len;
+                rem -= len;
+            }
+            src += 24;
+        } else if (strncmp(src, "counter(page).display()", 23) == 0) {
+            size_t len = strlen(page_str);
+            if (len <= rem) {
+                memcpy(dst, page_str, len);
+                dst += len;
+                rem -= len;
+            }
+            src += 23;
+        } else {
+            *dst++ = *src++;
+            rem--;
+        }
+    }
+    *dst = '\0';
+
+    // Second: Also replace %d with page number (for C-style format strings)
+    char script_buf2[MAX_STR_LEN];
+    char* src2 = script_buf;
+    char* dst2 = script_buf2;
+    size_t rem2 = sizeof(script_buf2) - 1;
+    
+    while (*src2 && rem2 > 0) {
+        if (*src2 == '%' && *(src2+1) == 'd') {
+            size_t len = strlen(page_str);
+            if (len <= rem2) {
+                memcpy(dst2, page_str, len);
+                dst2 += len;
+                rem2 -= len;
+            }
+            src2 += 2;
+        } else {
+            *dst2++ = *src2++;
+            rem2--;
+        }
+    }
+    *dst2 = '\0';
+
+    int saved_page = ctx->current_page;
+    int saved_disable = ctx->disable_pagebreaks;
+    TextState saved_state = current_state;
+
+    // Set the correct page for BOTH PDF and GDI display list
+    ctx->current_page = page_num - 1;
+    #ifdef _WIN32
+    current_render_page = page_num - 1;
+    #endif
+    ctx->disable_pagebreaks = 1;
+
+    Node* footer_node = parse_typst_string(script_buf2);
+    if (footer_node) {
+        double footer_y = margin_bottom;
+        double max_w = page_width - margin_left - margin_right;
+        render_node(ctx, footer_node, &footer_y, max_w, margin_left);
+    }
+
+    ctx->current_page = saved_page;
+    #ifdef _WIN32
+    current_render_page = saved_page;
+    #endif
+    ctx->disable_pagebreaks = saved_disable;
+    current_state = saved_state;
+}
 
 int export_pdf(Node* root, const char* filename) {
     FILE* f = fopen(filename, "wb");
@@ -1966,6 +3055,7 @@ int export_pdf(Node* root, const char* filename) {
     
     PdfContext ctx;
     ctx.current_page = 0;
+    ctx.disable_pagebreaks = 0;
     
     #ifdef _WIN32
     current_render_page = 0;
@@ -1984,7 +3074,13 @@ int export_pdf(Node* root, const char* filename) {
     }
     
     int num_pages = ctx.current_page + 1;
-    
+    ctx.total_pages = num_pages;
+
+    for (int p = 0; p < num_pages; p++) {
+        render_page_header(&ctx, p + 1, num_pages);
+        render_page_footer(&ctx, p + 1, num_pages);
+    }
+
     obj_offsets[++obj_count] = ftell(f);
     fprintf(f, "%d 0 obj\n<< /Type /Pages /Kids [", obj_count);
     for (int i = 0; i < num_pages; i++) {
@@ -2003,38 +3099,21 @@ int export_pdf(Node* root, const char* filename) {
 
     for (int i = 0; i < num_pages; i++) {
         obj_offsets[++obj_count] = ftell(f);
-        fprintf(f, "%d 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 %.2f %.2f] ", obj_count, page_width, page_height);
-        fprintf(f, "/Contents %d 0 R /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R /F4 6 0 R >> >> >>\nendobj\n", obj_count + 1);
+        fprintf(f, "%d 0 obj\n<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R /F4 6 0 R >> >> /MediaBox [0 0 %.2f %.2f] /Contents %d 0 R >>\nendobj\n",
+                obj_count, page_width, page_height, obj_count + 1);
         
         obj_offsets[++obj_count] = ftell(f);
-        
-        if (strlen(footer_script) > 0) {
-            char footer_text[MAX_STR_LEN];
-            snprintf(footer_text, sizeof(footer_text), "MRN: 948-204-11 | Eleanor Vance | Comprehensive DXA Report        Page %d of %d", i + 1, num_pages);
-            
-            #ifdef _WIN32
-            current_render_page = i;
-            if (i > max_page_num) max_page_num = i;
-            #endif
-            
-            render_styled_text(&ctx.pages[i], footer_text, margin_left, margin_bottom / 2.0 + 8.0, max_w, 7.5, 1, get_color("#718096"), 0);
-        }
-        
-        fprintf(f, "%d 0 obj\n<< /Length %zu >>\nstream\n", obj_count, ctx.pages[i].len);
-        if (ctx.pages[i].len > 0 && ctx.pages[i].data) {
-            fwrite(ctx.pages[i].data, 1, ctx.pages[i].len, f);
-        }
-        fprintf(f, "\nendstream\nendobj\n");
-        
+        fprintf(f, "%d 0 obj\n<< /Length %zu >>\nstream\n%sendstream\nendobj\n",
+                obj_count, ctx.pages[i].len, ctx.pages[i].data);
         sb_free(&ctx.pages[i]);
     }
 
-    long xref = ftell(f);
+    long xref_pos = ftell(f);
     fprintf(f, "xref\n0 %d\n0000000000 65535 f \n", obj_count + 1);
-    for (int i = 1; i <= obj_count; i++) fprintf(f, "%010ld 00000 n \n", obj_offsets[i]);
-    fprintf(f, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%ld\n%%%%EOF\n", obj_count + 1, xref);
-
-    fflush(f);
+    for (int i = 1; i <= obj_count; i++) {
+        fprintf(f, "%010ld 00000 n \n", obj_offsets[i]);
+    }
+    fprintf(f, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%ld\n%%EOF\n", obj_count + 1, xref_pos);
     fclose(f);
     return 1;
 }
@@ -2065,6 +3144,7 @@ static void update_window_title(HWND hwnd) {
     SetWindowTextA(hwnd, title);
 }
 
+#ifdef _WIN32
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_CREATE:
@@ -2174,10 +3254,12 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 }
                 else if (it->type == DL_LINE) {
                     int map_y = offset_y + (int)((page_height - it->y) * scale);
+                    int map_y2 = offset_y + (int)((page_height - (it->y + it->h)) * scale);
+                    
                     HPEN pen = CreatePen(PS_SOLID, max(1, (int)(it->stroke_w * scale)), RGB(it->c.r, it->c.g, it->c.b));
                     HGDIOBJ op = SelectObject(memDC, pen);
                     MoveToEx(memDC, map_x, map_y, NULL);
-                    LineTo(memDC, map_x + map_w, map_y);
+                    LineTo(memDC, map_x + map_w, map_y2);
                     SelectObject(memDC, op);
                     DeleteObject(pen);
                 }
@@ -2203,6 +3285,37 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     SelectObject(memDC, of);
                     DeleteObject(font);
                 }
+        else if (it->type == DL_PIE) {
+            int map_y = offset_y + (int)((page_height - (it->y + it->h)) * scale);
+            int map_h = (int)(it->h * scale);
+            
+            int center_x = map_x + map_w / 2;
+            int center_y = map_y + map_h / 2;
+            int radius = map_w / 2;
+            if (radius < 1) radius = 1;
+            
+            int num_pts = 32;
+            POINT pts[34];
+            pts[0].x = center_x;
+            pts[0].y = center_y;
+            
+            for (int k = 0; k <= num_pts; k++) {
+                double a = it->start_angle + (it->end_angle - it->start_angle) * (double)k / (double)num_pts;
+                pts[k + 1].x = center_x + (int)(radius * cos(a));
+                pts[k + 1].y = center_y - (int)(radius * sin(a));
+            }
+            
+            HBRUSH br = CreateSolidBrush(RGB(it->c.r, it->c.g, it->c.b));
+            HPEN pen = CreatePen(PS_SOLID, 1, RGB(255, 255, 255));
+            HGDIOBJ ob = SelectObject(memDC, br);
+            HGDIOBJ op = SelectObject(memDC, pen);
+            Polygon(memDC, pts, num_pts + 2);
+            SelectObject(memDC, ob);
+            SelectObject(memDC, op);
+            DeleteObject(br);
+            DeleteObject(pen);
+        }
+
             }
 
             BitBlt(hdc, 0, 0, win_w, win_h, memDC, 0, 0, SRCCOPY);
@@ -2222,6 +3335,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     }
     return DefWindowProc(hwnd, msg, wParam, lParam);
 }
+#endif
 
 void show_gdi_window() {
     WNDCLASSEXA wc = {0};
@@ -2235,7 +3349,7 @@ void show_gdi_window() {
 
     HWND hwnd = CreateWindowExA(0, "TypstGDIClass", "Typst Document Viewer",
         WS_OVERLAPPEDWINDOW | WS_VISIBLE,
-        CW_USEDEFAULT, CW_USEDEFAULT, 800, 1000,
+        CW_USEDEFAULT, CW_USEDEFAULT, 600, 800,
         NULL, NULL, wc.hInstance, NULL);
 
     SetFocus(hwnd);

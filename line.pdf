@@ -1,0 +1,1391 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [7 0 R 9 0 R 11 0 R 13 0 R ] /Count 4 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-BoldOblique >>
+endobj
+6 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Oblique >>
+endobj
+7 0 obj
+<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R /F4 6 0 R >> >> /MediaBox [0 0 612.00 792.00] /Contents 8 0 R >>
+endobj
+8 0 obj
+<< /Length 5069 >>
+stream
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 711.14 Td
+(let is-blank\(val\) = {) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 697.14 Td
+(if val == none { true }) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 683.14 Td
+(else if type\(val\) == "string" and val == "" { true }) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 669.14 Td
+(else { false }) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 655.14 Td
+(}) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 641.14 Td
+(let values = d.map\(p => p.at\(1\)\)) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 627.14 Td
+(let raw-max = calc.max\(..values\)) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 613.14 Td
+(let max-val = if raw-max == 0 { 10 } else { calc.max\(10, calc.ceil\(raw-max / 10\) ) Tj
+ET
+0 0 0 rg
+BT
+/F2 10.0 Tf
+0.176 0.216 0.282 rg
+403.72 613.14 Td
+( 10\) }) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 599.14 Td
+(let has-title = not is-blank\(title\)) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 585.14 Td
+(let has-x-label = not is-blank\(x-label\)) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 571.14 Td
+(let has-y-label = not is-blank\(y-label\)) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 557.14 Td
+(let svg-width = 440) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 543.14 Td
+(let svg-height = if has-x-label { 225 } else { 200 }) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 529.14 Td
+(let x-start = if has-y-label { 65 } else { 50 }) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 515.14 Td
+(let x-end = 415) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 501.14 Td
+(let plot-width = x-end - x-start) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 487.14 Td
+(let y-bottom = 150) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 473.14 Td
+(let y-top = 20) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 459.14 Td
+(let plot-height = y-bottom - y-top) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 445.14 Td
+(let num-items = d.len\(\)) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 431.14 Td
+(let slot-width = plot-width / num-items) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 417.14 Td
+(let points-arr = \(\)) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 403.14 Td
+(let elements-arr = \(\)) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 389.14 Td
+(let i = 0) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 375.14 Td
+(for item in d {) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 361.14 Td
+(let label = item.at\(0\)) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 347.14 Td
+(let val = item.at\(1\)) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 333.14 Td
+(let slot-center = x-start + \(i ) Tj
+ET
+0 0 0 rg
+BT
+/F2 10.0 Tf
+0.176 0.216 0.282 rg
+175.62 333.14 Td
+( slot-width\) + \(slot-width / 2\)) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 319.14 Td
+(let x = slot-center) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 305.14 Td
+(let h = \(val / max-val\) ) Tj
+ET
+0 0 0 rg
+BT
+/F2 10.0 Tf
+0.176 0.216 0.282 rg
+152.55 305.14 Td
+( plot-height) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 291.14 Td
+(let y = y-bottom - h) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 277.14 Td
+(points-arr.push\(str\(x\) + "," + str\(y\)\)) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 263.14 Td
+(elements-arr.push\("<circle cx='" + str\(x\) + "' cy='" + str\(y\) + "' r='4' fill='" + color + "'/><text x='" + str\(slot-center\) + ) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 249.14 Td
+("' y='" + str\(y - 8\) + "' font-size='10' text-anchor='middle' fill='" + color + "'>" + str\(val\) + "</text><text x='" + ) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 235.14 Td
+(str\(slot-center\) + "' y='" + str\(y-bottom + 20\) + "' font-size='11' text-anchor='middle' fill='#666'>" + label + ) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 221.14 Td
+("</text>"\)) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 207.14 Td
+(i += 1) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 193.14 Td
+(}) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 179.14 Td
+(let polyline-svg = "<polyline points='" + points-arr.join\(" "\) + "' fill='none' stroke='" + color + "' stroke-width='2.5'/>") Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 165.14 Td
+(let trend-svg = if trend-line and num-items > 1 {) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 151.14 Td
+(let sum-x = 0) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 137.14 Td
+(let sum-y = 0) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 123.14 Td
+(let sum-xx = 0) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 109.14 Td
+(let sum-xy = 0) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 95.14 Td
+(let idx = 0) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 81.14 Td
+(for item in d {) Tj
+ET
+0 0 0 rg
+endstream
+endobj
+9 0 obj
+<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R /F4 6 0 R >> >> /MediaBox [0 0 612.00 792.00] /Contents 10 0 R >>
+endobj
+10 0 obj
+<< /Length 5953 >>
+stream
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 711.14 Td
+(let x-val = idx) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 697.14 Td
+(let y-val = item.at\(1\)) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 683.14 Td
+(sum-x += x-val) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 669.14 Td
+(sum-y += y-val) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 655.14 Td
+(sum-xx += x-val ) Tj
+ET
+0 0 0 rg
+BT
+/F2 10.0 Tf
+0.176 0.216 0.282 rg
+130.04 655.14 Td
+( x-val) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 641.14 Td
+(sum-xy += x-val ) Tj
+ET
+0 0 0 rg
+BT
+/F2 10.0 Tf
+0.176 0.216 0.282 rg
+130.04 641.14 Td
+( y-val) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 627.14 Td
+(idx += 1) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 613.14 Td
+(}) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 599.14 Td
+(let denom = \(num-items ) Tj
+ET
+0 0 0 rg
+BT
+/F2 10.0 Tf
+0.176 0.216 0.282 rg
+164.78 599.14 Td
+( sum-xx\) - \(sum-x ) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+249.36 599.14 Td
+( sum-x\)) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 585.14 Td
+(if denom != 0 {) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 571.14 Td
+(let m = \(num-items ) Tj
+ET
+0 0 0 rg
+BT
+/F2 10.0 Tf
+0.176 0.216 0.282 rg
+142.54 571.14 Td
+( sum-xy - sum-x ) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+220.12 571.14 Td
+( sum-y\) / denom) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 557.14 Td
+(let b = \(sum-y - m ) Tj
+ET
+0 0 0 rg
+BT
+/F2 10.0 Tf
+0.176 0.216 0.282 rg
+137.54 557.14 Td
+( sum-x\) / num-items) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 543.14 Td
+(let y1-val = m ) Tj
+ET
+0 0 0 rg
+BT
+/F2 10.0 Tf
+0.176 0.216 0.282 rg
+119.21 543.14 Td
+( 0 + b) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 529.14 Td
+(let x1-px = x-start + \(0 ) Tj
+ET
+0 0 0 rg
+BT
+/F2 10.0 Tf
+0.176 0.216 0.282 rg
+156.73 529.14 Td
+( slot-width\) + \(slot-width / 2\)) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 515.14 Td
+(let y1-px = y-bottom - \(\(y1-val / max-val\) ) Tj
+ET
+0 0 0 rg
+BT
+/F2 10.0 Tf
+0.176 0.216 0.282 rg
+236.45 515.14 Td
+( plot-height\)) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 501.14 Td
+(let y2-val = m ) Tj
+ET
+0 0 0 rg
+BT
+/F2 10.0 Tf
+0.176 0.216 0.282 rg
+119.21 501.14 Td
+( \(num-items - 1\) + b) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 487.14 Td
+(let x2-px = x-start + \(\(num-items - 1\) ) Tj
+ET
+0 0 0 rg
+BT
+/F2 10.0 Tf
+0.176 0.216 0.282 rg
+218.95 487.14 Td
+( slot-width\) + \(slot-width / 2\)) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 473.14 Td
+(let y2-px = y-bottom - \(\(y2-val / max-val\) ) Tj
+ET
+0 0 0 rg
+BT
+/F2 10.0 Tf
+0.176 0.216 0.282 rg
+236.45 473.14 Td
+( plot-height\)) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 459.14 Td
+("<line x1='" + str\(x1-px\) + "' y1='" + str\(y1-px\) + "' x2='" + str\(x2-px\) + "' y2='" + str\(y2-px\) + "' stroke='#dc2626' ) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 445.14 Td
+(stroke-width='2' stroke-dasharray='4'/>") Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 431.14 Td
+(} else {) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 417.14 Td
+("") Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 403.14 Td
+(}) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 389.14 Td
+(} else {) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 375.14 Td
+("") Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 361.14 Td
+(}) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 347.14 Td
+(let grid-svg = range\(5\).map\(idx => {) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 333.14 Td
+(let val = \(max-val / 4\) ) Tj
+ET
+0 0 0 rg
+BT
+/F2 10.0 Tf
+0.176 0.216 0.282 rg
+152.55 333.14 Td
+( \(4 - idx\)) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 319.14 Td
+(let y = y-top + \(idx ) Tj
+ET
+0 0 0 rg
+BT
+/F2 10.0 Tf
+0.176 0.216 0.282 rg
+138.95 319.14 Td
+( \(plot-height / 4\)\)) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 305.14 Td
+("<line x1='" + str\(x-start\) + "' y1='" + str\(y\) + "' x2='" + str\(x-end\) + "' y2='" + str\(y\) + "' stroke='#e5e7eb' ) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 291.14 Td
+(stroke-width='1'/><text x='" + str\(x-start - 8\) + "' y='" + str\(y + 4\) + "' font-size='10' text-anchor='end' fill='#666'>" + ) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 277.14 Td
+(str\(calc.round\(val\)\) + "</text>") Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 263.14 Td
+(}\).join\(""\)) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 249.14 Td
+(let y-label-svg = if has-y-label {) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 235.14 Td
+(let cy = y-top + \(plot-height / 2\)) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 221.14 Td
+("<text x='20' y='" + str\(cy\) + "' transform='rotate\(-90, 20, " + str\(cy\) + "\)' font-size='11' text-anchor='middle' ) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 207.14 Td
+(fill='#333'>" + str\(y-label\) + "</text>") Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 193.14 Td
+(} else {) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 179.14 Td
+("") Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 165.14 Td
+(}) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 151.14 Td
+(let x-label-svg = if has-x-label {) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 137.14 Td
+(let cx = x-start + \(plot-width / 2\)) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 123.14 Td
+("<text x='" + str\(cx\) + "' y='" + str\(y-bottom + 42\) + "' font-size='11' text-anchor='middle' fill='#333'>" + str\(x-label\) ) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 109.14 Td
+(+ "</text>") Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 95.14 Td
+(} else {) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 81.14 Td
+("") Tj
+ET
+0 0 0 rg
+endstream
+endobj
+11 0 obj
+<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R /F4 6 0 R >> >> /MediaBox [0 0 612.00 792.00] /Contents 12 0 R >>
+endobj
+12 0 obj
+<< /Length 6160 >>
+stream
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 711.14 Td
+(}) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 697.14 Td
+(let svg-string = "<svg viewBox='0 0 " + str\(svg-width\) + " " + str\(svg-height\) + "' ) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 683.14 Td
+(xmlns='http://www.w3.org/2000/svg'><rect width='100%' height='100%' fill='white'/>" + grid-svg + "<line x1='" + ) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 669.14 Td
+(str\(x-start\) + "' y1='" + str\(y-bottom\) + "' x2='" + str\(x-end\) + "' y2='" + str\(y-bottom\) + "' stroke='#333' ) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 655.14 Td
+(stroke-width='2'/><line x1='" + str\(x-start\) + "' y1='" + str\(y-top\) + "' x2='" + str\(x-start\) + "' y2='" + str\(y-bottom\) + "' ) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 641.14 Td
+(stroke='#333' stroke-width='2'/>" + trend-svg + polyline-svg + elements-arr.join\(""\) + y-label-svg + x-label-svg + ) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 627.14 Td
+("</svg>") Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 613.14 Td
+(let chart-content = image\(bytes\(svg-string\), format: "svg", width: 80%\)) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 599.14 Td
+(align\(center, if has-title {) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 585.14 Td
+(stack\() Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 571.14 Td
+(spacing: 8pt,) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 557.14 Td
+(if type\(title\) == "function" { title\(\) } else { title },) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 543.14 Td
+(chart-content) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 529.14 Td
+(\)) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 515.14 Td
+(} else {) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 501.14 Td
+(chart-content) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 487.14 Td
+(}\)) Tj
+ET
+0 0 0 rg
+BT
+/F1 10.0 Tf
+0.176 0.216 0.282 rg
+56.69 473.14 Td
+(}) Tj
+ET
+0 0 0 rg
+BT
+/F1 12.0 Tf
+0.000 0.000 0.000 rg
+222.64 457.14 Td
+(Product Performance Overview) Tj
+ET
+0 0 0 rg
+0.898 0.906 0.922 RG 0.50 w
+116.69 434.14 m 535.31 434.14 l S
+0 0 0 RG
+BT
+/F1 8.0 Tf
+0.400 0.400 0.400 rg
+94.69 431.14 Td
+(110) Tj
+ET
+0 0 0 rg
+0.898 0.906 0.922 RG 0.50 w
+116.69 401.64 m 535.31 401.64 l S
+0 0 0 RG
+BT
+/F1 8.0 Tf
+0.400 0.400 0.400 rg
+94.69 398.64 Td
+(82) Tj
+ET
+0 0 0 rg
+0.898 0.906 0.922 RG 0.50 w
+116.69 369.14 m 535.31 369.14 l S
+0 0 0 RG
+BT
+/F1 8.0 Tf
+0.400 0.400 0.400 rg
+94.69 366.14 Td
+(55) Tj
+ET
+0 0 0 rg
+0.898 0.906 0.922 RG 0.50 w
+116.69 336.64 m 535.31 336.64 l S
+0 0 0 RG
+BT
+/F1 8.0 Tf
+0.400 0.400 0.400 rg
+94.69 333.64 Td
+(28) Tj
+ET
+0 0 0 rg
+0.898 0.906 0.922 RG 0.50 w
+116.69 304.14 m 535.31 304.14 l S
+0 0 0 RG
+BT
+/F1 8.0 Tf
+0.400 0.400 0.400 rg
+94.69 301.14 Td
+(0) Tj
+ET
+0 0 0 rg
+0.200 0.200 0.200 RG 1.50 w
+116.69 304.14 m 535.31 304.14 l S
+0 0 0 RG
+0.200 0.200 0.200 RG 1.50 w
+116.69 434.14 m 116.69 304.14 l S
+0 0 0 RG
+BT
+/F1 9.0 Tf
+0.200 0.200 0.200 rg
+61.69 369.14 Td
+(Revenue \($\)) Tj
+ET
+0 0 0 rg
+BT
+/F1 9.0 Tf
+0.200 0.200 0.200 rg
+306.00 272.14 Td
+(Products) Tj
+ET
+0 0 0 rg
+0.145 0.388 0.922 RG 2.00 w
+169.02 357.32 m 273.67 434.14 l S
+0 0 0 RG
+0.145 0.388 0.922 RG 2.00 w
+273.67 434.14 m 378.33 392.78 l S
+0 0 0 RG
+0.145 0.388 0.922 RG 2.00 w
+378.33 392.78 m 482.98 416.41 l S
+0 0 0 RG
+0.145 0.388 0.922 rg
+166.52 354.82 5.00 5.00 re f
+BT
+/F1 8.0 Tf
+0.145 0.388 0.922 rg
+163.02 363.32 Td
+(45) Tj
+ET
+0 0 0 rg
+BT
+/F1 8.0 Tf
+0.400 0.400 0.400 rg
+157.02 289.14 Td
+(Prod A) Tj
+ET
+0 0 0 rg
+0.145 0.388 0.922 rg
+271.17 431.64 5.00 5.00 re f
+BT
+/F1 8.0 Tf
+0.145 0.388 0.922 rg
+267.67 440.14 Td
+(110) Tj
+ET
+0 0 0 rg
+BT
+/F1 8.0 Tf
+0.400 0.400 0.400 rg
+261.67 289.14 Td
+(Prod B) Tj
+ET
+0 0 0 rg
+0.145 0.388 0.922 rg
+375.83 390.28 5.00 5.00 re f
+BT
+/F1 8.0 Tf
+0.145 0.388 0.922 rg
+372.33 398.78 Td
+(75) Tj
+ET
+0 0 0 rg
+BT
+/F1 8.0 Tf
+0.400 0.400 0.400 rg
+366.33 289.14 Td
+(Prod C) Tj
+ET
+0 0 0 rg
+0.145 0.388 0.922 rg
+480.48 413.91 5.00 5.00 re f
+BT
+/F1 8.0 Tf
+0.145 0.388 0.922 rg
+476.98 422.41 Td
+(95) Tj
+ET
+0 0 0 rg
+BT
+/F1 8.0 Tf
+0.400 0.400 0.400 rg
+470.98 289.14 Td
+(Prod D) Tj
+ET
+0 0 0 rg
+0.863 0.149 0.149 RG 1.50 w
+169.02 379.78 m 482.98 420.55 l S
+0 0 0 RG
+BT
+/F1 12.0 Tf
+0.000 0.000 0.000 rg
+222.64 247.14 Td
+(Product Performance Overview) Tj
+ET
+0 0 0 rg
+0.898 0.906 0.922 RG 0.50 w
+116.69 224.14 m 535.31 224.14 l S
+0 0 0 RG
+BT
+/F1 8.0 Tf
+0.400 0.400 0.400 rg
+94.69 221.14 Td
+(110) Tj
+ET
+0 0 0 rg
+0.898 0.906 0.922 RG 0.50 w
+116.69 191.64 m 535.31 191.64 l S
+0 0 0 RG
+BT
+/F1 8.0 Tf
+0.400 0.400 0.400 rg
+94.69 188.64 Td
+(82) Tj
+ET
+0 0 0 rg
+0.898 0.906 0.922 RG 0.50 w
+116.69 159.14 m 535.31 159.14 l S
+0 0 0 RG
+BT
+/F1 8.0 Tf
+0.400 0.400 0.400 rg
+94.69 156.14 Td
+(55) Tj
+ET
+0 0 0 rg
+0.898 0.906 0.922 RG 0.50 w
+116.69 126.64 m 535.31 126.64 l S
+0 0 0 RG
+BT
+/F1 8.0 Tf
+0.400 0.400 0.400 rg
+94.69 123.64 Td
+(28) Tj
+ET
+0 0 0 rg
+0.898 0.906 0.922 RG 0.50 w
+116.69 94.14 m 535.31 94.14 l S
+0 0 0 RG
+BT
+/F1 8.0 Tf
+0.400 0.400 0.400 rg
+94.69 91.14 Td
+(0) Tj
+ET
+0 0 0 rg
+0.200 0.200 0.200 RG 1.50 w
+116.69 94.14 m 535.31 94.14 l S
+0 0 0 RG
+0.200 0.200 0.200 RG 1.50 w
+116.69 224.14 m 116.69 94.14 l S
+0 0 0 RG
+BT
+/F1 9.0 Tf
+0.200 0.200 0.200 rg
+61.69 159.14 Td
+(Revenue \($\)) Tj
+ET
+0 0 0 rg
+BT
+/F1 9.0 Tf
+0.200 0.200 0.200 rg
+306.00 62.14 Td
+(Products) Tj
+ET
+0 0 0 rg
+0.176 0.216 0.282 RG 2.00 w
+186.46 147.32 m 326.00 224.14 l S
+0 0 0 RG
+0.176 0.216 0.282 RG 2.00 w
+326.00 224.14 m 465.54 182.78 l S
+0 0 0 RG
+0.176 0.216 0.282 rg
+183.96 144.82 5.00 5.00 re f
+BT
+/F1 8.0 Tf
+0.176 0.216 0.282 rg
+180.46 153.32 Td
+(45) Tj
+ET
+0 0 0 rg
+BT
+/F1 8.0 Tf
+0.400 0.400 0.400 rg
+174.46 79.14 Td
+(Prod A) Tj
+ET
+0 0 0 rg
+0.176 0.216 0.282 rg
+323.50 221.64 5.00 5.00 re f
+BT
+/F1 8.0 Tf
+0.176 0.216 0.282 rg
+320.00 230.14 Td
+(110) Tj
+ET
+0 0 0 rg
+BT
+/F1 8.0 Tf
+0.400 0.400 0.400 rg
+314.00 79.14 Td
+(Prod B) Tj
+ET
+0 0 0 rg
+0.176 0.216 0.282 rg
+463.04 180.28 5.00 5.00 re f
+BT
+/F1 8.0 Tf
+0.176 0.216 0.282 rg
+459.54 188.78 Td
+(75) Tj
+ET
+0 0 0 rg
+BT
+/F1 8.0 Tf
+0.400 0.400 0.400 rg
+453.54 79.14 Td
+(Prod C) Tj
+ET
+0 0 0 rg
+0.863 0.149 0.149 RG 1.50 w
+186.46 167.02 m 465.54 202.47 l S
+0 0 0 RG
+endstream
+endobj
+13 0 obj
+<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R /F4 6 0 R >> >> /MediaBox [0 0 612.00 792.00] /Contents 14 0 R >>
+endobj
+14 0 obj
+<< /Length 1908 >>
+stream
+BT
+/F1 12.0 Tf
+0.000 0.000 0.000 rg
+251.99 709.14 Td
+(Prhmance Overview) Tj
+ET
+0 0 0 rg
+0.898 0.906 0.922 RG 0.50 w
+116.69 686.14 m 535.31 686.14 l S
+0 0 0 RG
+BT
+/F1 8.0 Tf
+0.400 0.400 0.400 rg
+94.69 683.14 Td
+(280) Tj
+ET
+0 0 0 rg
+0.898 0.906 0.922 RG 0.50 w
+116.69 653.64 m 535.31 653.64 l S
+0 0 0 RG
+BT
+/F1 8.0 Tf
+0.400 0.400 0.400 rg
+94.69 650.64 Td
+(210) Tj
+ET
+0 0 0 rg
+0.898 0.906 0.922 RG 0.50 w
+116.69 621.14 m 535.31 621.14 l S
+0 0 0 RG
+BT
+/F1 8.0 Tf
+0.400 0.400 0.400 rg
+94.69 618.14 Td
+(140) Tj
+ET
+0 0 0 rg
+0.898 0.906 0.922 RG 0.50 w
+116.69 588.64 m 535.31 588.64 l S
+0 0 0 RG
+BT
+/F1 8.0 Tf
+0.400 0.400 0.400 rg
+94.69 585.64 Td
+(70) Tj
+ET
+0 0 0 rg
+0.898 0.906 0.922 RG 0.50 w
+116.69 556.14 m 535.31 556.14 l S
+0 0 0 RG
+BT
+/F1 8.0 Tf
+0.400 0.400 0.400 rg
+94.69 553.14 Td
+(0) Tj
+ET
+0 0 0 rg
+0.200 0.200 0.200 RG 1.50 w
+116.69 556.14 m 535.31 556.14 l S
+0 0 0 RG
+0.200 0.200 0.200 RG 1.50 w
+116.69 686.14 m 116.69 556.14 l S
+0 0 0 RG
+BT
+/F1 9.0 Tf
+0.200 0.200 0.200 rg
+61.69 621.14 Td
+(Revenue \($\)) Tj
+ET
+0 0 0 rg
+BT
+/F1 9.0 Tf
+0.200 0.200 0.200 rg
+306.00 524.14 Td
+(Products) Tj
+ET
+0 0 0 rg
+0.176 0.216 0.282 RG 2.00 w
+186.46 623.46 m 326.00 560.78 l S
+0 0 0 RG
+0.176 0.216 0.282 RG 2.00 w
+326.00 560.78 m 465.54 683.82 l S
+0 0 0 RG
+0.176 0.216 0.282 rg
+183.96 620.96 5.00 5.00 re f
+BT
+/F1 8.0 Tf
+0.176 0.216 0.282 rg
+180.46 629.46 Td
+(145) Tj
+ET
+0 0 0 rg
+BT
+/F1 8.0 Tf
+0.400 0.400 0.400 rg
+174.46 541.14 Td
+(aassaas) Tj
+ET
+0 0 0 rg
+0.176 0.216 0.282 rg
+323.50 558.28 5.00 5.00 re f
+BT
+/F1 8.0 Tf
+0.176 0.216 0.282 rg
+320.00 566.78 Td
+(10) Tj
+ET
+0 0 0 rg
+BT
+/F1 8.0 Tf
+0.400 0.400 0.400 rg
+314.00 541.14 Td
+(fs) Tj
+ET
+0 0 0 rg
+0.176 0.216 0.282 rg
+463.04 681.32 5.00 5.00 re f
+BT
+/F1 8.0 Tf
+0.176 0.216 0.282 rg
+459.54 689.82 Td
+(275) Tj
+ET
+0 0 0 rg
+BT
+/F1 8.0 Tf
+0.400 0.400 0.400 rg
+453.54 541.14 Td
+(Prod C) Tj
+ET
+0 0 0 rg
+0.863 0.149 0.149 RG 1.50 w
+186.46 592.51 m 465.54 652.87 l S
+0 0 0 RG
+endstream
+endobj
+xref
+0 15
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000142 00000 n 
+0000000212 00000 n 
+0000000287 00000 n 
+0000000369 00000 n 
+0000000447 00000 n 
+0000000609 00000 n 
+0000005729 00000 n 
+0000005892 00000 n 
+0000011897 00000 n 
+0000012061 00000 n 
+0000018273 00000 n 
+0000018437 00000 n 
+trailer
+<< /Size 15 /Root 1 0 R >>
+startxref
+20397
+%EOF
