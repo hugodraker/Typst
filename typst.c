@@ -56,7 +56,7 @@ typedef enum {
     NODE_GRID, NODE_TABLE, NODE_RECT, NODE_BLOCK, NODE_LINE, 
     NODE_VSPACE, NODE_HSPACE, NODE_PAGE, NODE_HEADER,
     NODE_PAGEBREAK, NODE_TSCORE_CHART, NODE_BMD_CHART, NODE_PIE_CHART,
-    NODE_LINE_CHART
+    NODE_LINE_CHART, NODE_BAR_CHART
 } NodeType;
 
 
@@ -409,8 +409,21 @@ static void unwrap_content_markup(char* script) {
             }
         }
         
+        // 1b. Strip enclosing {...} braces
+        if (*p == '{') {
+            p++;
+            size_t len = strlen(p);
+            while (len > 0 && isspace((unsigned char)p[len - 1])) len--;
+            if (len > 0 && p[len - 1] == '}') {
+                p[len - 1] = '\0';
+                memmove(script, p, len);
+                changed = 1;
+                continue;
+            }
+        }
+        
         // 2. Strip leading "context" keyword
-        if (strncmp(p, "context", 7) == 0 && isspace((unsigned char)p[7])) {
+        if (strncmp(p, "context", 7) == 0 && (isspace((unsigned char)p[7]) || p[7] == '\0' || p[7] == '{' || p[7] == '[')) {
             p += 7;
             while (*p && isspace((unsigned char)*p)) p++;
             memmove(script, p, strlen(p) + 1);
@@ -451,13 +464,31 @@ static void unwrap_content_markup(char* script) {
     }
 }
 
-static void strip_quotes(char* str) {
-    if (!str) return;
-    unwrap_content_markup(str);
-    size_t len = strlen(str);
-    if (len >= 2 && ((str[0] == '"' && str[len-1] == '"') || (str[0] == '\'' && str[len-1] == '\''))) {
-        memmove(str, str + 1, len - 2);
-        str[len - 2] = '\0';
+static void unwrap_logic_statements(char* script) {
+    int changed = 1;
+    while (changed) {
+        changed = 0;
+        char* p = script;
+        while (*p && isspace((unsigned char)*p)) p++;
+        
+        if (strncmp(p, "let ", 4) == 0) {
+            char* eol = strchr(p, '\n');
+            if (eol) p = eol + 1;
+            else p += strlen(p);
+            while (*p && isspace((unsigned char)*p)) p++;
+            memmove(script, p, strlen(p) + 1);
+            changed = 1;
+            continue;
+        }
+
+        if (strncmp(p, "if ", 3) == 0) {
+            char* bracket = strchr(p, '[');
+            if (bracket) p = bracket; // keep the '[' so unwrap_content_markup can strip it on the next pass
+            else p += strlen(p);
+            memmove(script, p, strlen(p) + 1);
+            changed = 1;
+            continue;
+        }
     }
 }
 
@@ -475,24 +506,30 @@ static int extract_param_value(const char* params, const char* key, char* out_va
                 while (*p && isspace((unsigned char)*p)) p++;
                 
                 size_t idx = 0;
-                int paren_depth = 0, bracket_depth = 0;
+                int paren_depth = 0, bracket_depth = 0, brace_depth = 0;
                 int started_with_bracket = (*p == '[');
+                int started_with_brace = (*p == '{');
                 
                 while (*p) {
                     if (*p == '(') paren_depth++;
                     else if (*p == ')') paren_depth--;
                     else if (*p == '[') bracket_depth++;
                     else if (*p == ']') bracket_depth--;
+                    else if (*p == '{') brace_depth++;
+                    else if (*p == '}') brace_depth--;
                     
                     if (idx < max_len - 1) out_val[idx++] = *p;
                     p++;
                     
-                    // Stop immediately when a starting '[...]' content block closes
-                    if (started_with_bracket && bracket_depth == 0 && paren_depth == 0) {
+                    // Stop immediately when a starting '[...]' or '{...}' content block closes
+                    if (started_with_bracket && bracket_depth == 0 && paren_depth == 0 && brace_depth == 0) {
+                        break;
+                    }
+                    if (started_with_brace && bracket_depth == 0 && paren_depth == 0 && brace_depth == 0) {
                         break;
                     }
                     // Otherwise stop at a top-level comma
-                    if (!started_with_bracket && paren_depth == 0 && bracket_depth == 0 && *p == ',') {
+                    if (!started_with_bracket && !started_with_brace && paren_depth == 0 && bracket_depth == 0 && brace_depth == 0 && *p == ',') {
                         break;
                     }
                 }
@@ -503,12 +540,14 @@ static int extract_param_value(const char* params, const char* key, char* out_va
         }
         
         // Advance past the next argument at depth 0
-        int p_depth = 0, b_depth = 0;
-        while (*p && (p_depth > 0 || b_depth > 0 || *p != ',')) {
+        int p_depth = 0, b_depth = 0, br_depth = 0;
+        while (*p && (p_depth > 0 || b_depth > 0 || br_depth > 0 || *p != ',')) {
             if (*p == '(') p_depth++;
             else if (*p == ')') p_depth--;
             else if (*p == '[') b_depth++;
             else if (*p == ']') b_depth--;
+            else if (*p == '{') br_depth++;
+            else if (*p == '}') br_depth--;
             p++;
         }
         if (*p == ',') p++;
@@ -776,6 +815,7 @@ static void parse_let_directive(void) {
     }
 
     if (source[source_pos] == '[') {
+        /* Handle content block [ ... ] */
         int depth = 1;
         source_pos++;
         int bi = 0;
@@ -788,12 +828,28 @@ static void parse_let_directive(void) {
             source_pos++;
         }
         def->body[bi] = '\0';
+        return;
+    } else if (source[source_pos] == '{') {
+        /* Handle code block { ... } — consume entire block, don't store body */
+        int depth = 1;
+        source_pos++;
+        while (source[source_pos] && depth > 0) {
+            if (source[source_pos] == '{') depth++;
+            else if (source[source_pos] == '}') depth--;
+            if (depth > 0) source_pos++;
+        }
+        if (source[source_pos] == '}') source_pos++;
+        /* Mark as function with empty body so callers skip it gracefully */
+        def->is_func = 1;
+        def->body[0] = '\0';
+        return;
     } else {
         int bi = 0;
         while (source[source_pos] && source[source_pos] != '\n' && bi < MAX_STR_LEN - 1) {
             def->body[bi++] = source[source_pos++];
         }
         def->body[bi] = '\0';
+        return;
     }
 }
 
@@ -862,6 +918,8 @@ static void parse_set_directive(void) {
             header_script[sizeof(header_script) - 1] = '\0';
 
             unwrap_content_markup(header_script);
+            unwrap_logic_statements(header_script);
+            unwrap_content_markup(header_script);
 
             char* counter_pos;
             while ((counter_pos = strstr(header_script, "#counter(page).display()")) != NULL) {
@@ -878,20 +936,12 @@ static void parse_set_directive(void) {
 
         char footer_raw[MAX_STR_LEN];
         if (extract_param_value(params, "footer", footer_raw, sizeof(footer_raw))) {
-            char* p = footer_raw;
-            while (*p && isspace((unsigned char)*p)) p++;
-            if (strncmp(p, "context", 7) == 0) {
-                p += 7;
-                while (*p && isspace((unsigned char)*p)) p++;
-            }
-            if (*p == '[') {
-                p++;
-                size_t len = strlen(p);
-                while (len > 0 && isspace((unsigned char)p[len - 1])) len--;
-                if (len > 0 && p[len - 1] == ']') p[len - 1] = '\0';
-            }
-            strncpy(footer_script, p, sizeof(footer_script) - 1);
+            strncpy(footer_script, footer_raw, sizeof(footer_script) - 1);
             footer_script[sizeof(footer_script) - 1] = '\0';
+
+            unwrap_content_markup(footer_script);
+            unwrap_logic_statements(footer_script);
+            unwrap_content_markup(footer_script);
 
             char* counter_pos;
             while ((counter_pos = strstr(footer_script, "#counter(page).display()")) != NULL) {
@@ -1483,7 +1533,6 @@ static Node* parse_element(void) {
                 }
             }
         }
-
         if (strcmp(name, "pie-chart") == 0) {
             source_pos = p;
             skip_whitespace_and_comments();
@@ -1527,7 +1576,7 @@ static Node* parse_element(void) {
             }
             return chart;
         }
-        if (strcmp(name, "line-chart") == 0) {
+if (strcmp(name, "line-chart") == 0) {
             source_pos = p;
             skip_whitespace_and_comments();
             char params[MAX_STR_LEN] = {0};
@@ -1542,35 +1591,33 @@ static Node* parse_element(void) {
                 }
                 params[pi] = '\0';
             }
+
             Node* chart = alloc_node(NODE_LINE_CHART);
             if (!chart) return NULL;
             
             chart->chart_title[0] = '\0';
             chart->chart_x_label[0] = '\0';
             chart->chart_y_label[0] = '\0';
-            strcpy(chart->chart_color, "#2563eb");
+            chart->chart_color[0] = '\0';
             chart->chart_trend_line = 0;
             
-            if (extract_param_value(params, "title", chart->chart_title, sizeof(chart->chart_title))) {
-                strip_quotes(chart->chart_title);
-                char clean[128]; int ci = 0;
-                for (int i = 0; chart->chart_title[i]; i++) {
-                    if (chart->chart_title[i] != '*') clean[ci++] = chart->chart_title[i];
-                }
-                clean[ci] = '\0';
-                strcpy(chart->chart_title, clean);
-            }
+            // Simplified title parsing mirroring pie-chart
+            extract_param_value(params, "title", chart->chart_title, sizeof(chart->chart_title));
+            unwrap_content_markup(chart->chart_title);
             
-            if (extract_param_value(params, "x-label", chart->chart_x_label, sizeof(chart->chart_x_label))) {
-                strip_quotes(chart->chart_x_label);
-            }
+            extract_param_value(params, "x-label", chart->chart_x_label, sizeof(chart->chart_x_label));
+            unwrap_content_markup(chart->chart_x_label);
 
-            if (extract_param_value(params, "y-label", chart->chart_y_label, sizeof(chart->chart_y_label))) {
-                strip_quotes(chart->chart_y_label);
-            }
+            extract_param_value(params, "y-label", chart->chart_y_label, sizeof(chart->chart_y_label));
+            unwrap_content_markup(chart->chart_y_label);
 
             if (extract_param_value(params, "color", chart->chart_color, sizeof(chart->chart_color))) {
-                strip_quotes(chart->chart_color);
+                unwrap_content_markup(chart->chart_color);
+            } else if (strstr(params, "\"random\"") != NULL || strstr(params, "random") != NULL) {
+                strcpy(chart->chart_color, "random");
+            }
+            if (chart->chart_color[0] == '\0') {
+                strcpy(chart->chart_color, "#2563eb");
             }
 
             char tl_buf[32] = {0};
@@ -1580,6 +1627,71 @@ static Node* parse_element(void) {
 
             const char* ptr = params;
             chart->chart_count = 0;
+            
+            // Extracts labels identically to pie-chart, grabbing the string inside ("...")
+            while (*ptr && chart->chart_count < 8) {
+                ptr = strstr(ptr, "(\"");
+                if (!ptr) break;
+                ptr += 2;
+                int i = 0;
+                while (*ptr && *ptr != '"' && i < 31) {
+                    chart->chart_labels[chart->chart_count][i++] = *ptr++;
+                }
+                chart->chart_labels[chart->chart_count][i] = '\0';
+                
+                while (*ptr && *ptr != ',') ptr++; 
+                if (*ptr == ',') ptr++;
+                while (*ptr && isspace((unsigned char)*ptr)) ptr++;
+                
+                chart->chart_scores[chart->chart_count] = atof(ptr);
+                chart->chart_count++;
+            }
+            return chart;
+        }
+if (strcmp(name, "bar-chart") == 0) {
+            source_pos = p;
+            skip_whitespace_and_comments();
+            char params[MAX_STR_LEN] = {0};
+            if (source[source_pos] == '(') {
+                source_pos++;
+                int pi = 0, depth = 1;
+                while (source[source_pos] && depth > 0) {
+                    if (source[source_pos] == '(') depth++;
+                    else if (source[source_pos] == ')') depth--;
+                    if (depth > 0 && pi < MAX_STR_LEN - 1) params[pi++] = source[source_pos];
+                    source_pos++;
+                }
+                params[pi] = '\0';
+            }
+
+            Node* chart = alloc_node(NODE_BAR_CHART);
+            if (!chart) return NULL;
+            
+            chart->chart_title[0] = '\0';
+            chart->chart_x_label[0] = '\0';
+            chart->chart_y_label[0] = '\0';
+            chart->chart_color[0] = '\0';
+            
+            // Simplified title parsing mirroring pie-chart
+            extract_param_value(params, "title", chart->chart_title, sizeof(chart->chart_title));
+            unwrap_content_markup(chart->chart_title);
+            
+            extract_param_value(params, "x-label", chart->chart_x_label, sizeof(chart->chart_x_label));
+            unwrap_content_markup(chart->chart_x_label);
+
+            extract_param_value(params, "y-label", chart->chart_y_label, sizeof(chart->chart_y_label));
+            unwrap_content_markup(chart->chart_y_label);
+
+            if (extract_param_value(params, "color", chart->chart_color, sizeof(chart->chart_color))) {
+                unwrap_content_markup(chart->chart_color);
+            } else if (strstr(params, "\"random\"") != NULL || strstr(params, "random") != NULL) {
+                strcpy(chart->chart_color, "random");
+            }
+
+            const char* ptr = params;
+            chart->chart_count = 0;
+            
+            // Extracts labels identically to pie-chart, grabbing the string inside ("...")
             while (*ptr && chart->chart_count < 8) {
                 ptr = strstr(ptr, "(\"");
                 if (!ptr) break;
@@ -1784,6 +1896,7 @@ static void pdf_draw_text_run(StreamBuffer* sb, const char* text, double x, doub
         it->is_bold = is_bold;
         it->is_italic = is_italic;
         it->c = text_color;
+        it->start_angle = 0; //angle_deg; // Store angle for GDI referencing
         strncpy(it->text, text, 1023);
         it->text[1023] = '\0';
     }
@@ -1794,9 +1907,15 @@ static void pdf_draw_text_run(StreamBuffer* sb, const char* text, double x, doub
     else if (is_bold) font = "F2";
     else if (is_italic) font = "F4";
     
-    sb_printf(sb, "BT\n/%s %.1f Tf\n%.3f %.3f %.3f rg\n%.2f %.2f Td\n(%s) Tj\nET\n0 0 0 rg\n",
+    double rad = 0;//angle_deg * (3.14159265358979323846 / 180.0);
+    double a = cos(rad);
+    double b = sin(rad);
+    double c = -sin(rad);
+    double d = cos(rad);
+    
+    sb_printf(sb, "BT\n/%s %.1f Tf\n%.3f %.3f %.3f rg\n%.4f %.4f %.4f %.4f %.2f %.2f Tm\n(%s) Tj\nET\n0 0 0 rg\n",
               font, font_size, text_color.r / 255.0, text_color.g / 255.0, text_color.b / 255.0,
-              x, y, escaped);
+              a, b, c, d, x, y, escaped);
 }
 
 static void draw_pdf_rect(PdfContext* ctx, double x, double y, double w, double h, Color fill_c, int has_stroke, Color stroke_c, double stroke_w) {
@@ -2084,6 +2203,9 @@ static double measure_node_height(Node* n, double max_w) {
             return 260.0;
         case NODE_LINE_CHART:
             return 225.0;
+        case NODE_BAR_CHART: {
+            double base_h = (n->chart_x_label[0] != '\0') ? 225.0 : 200.0;
+            return (n->chart_title[0] != '\0') ? base_h + 25.0 : base_h;}
         case NODE_TSCORE_CHART:
         case NODE_BMD_CHART:
             return 105.0;
@@ -2536,6 +2658,118 @@ case NODE_PAGE: {
             if (row_y_positions) free(row_y_positions);
             break;
         }
+case NODE_BAR_CHART: {
+    int has_x_label = (n->chart_x_label[0] != '\0');
+    int has_y_label = (n->chart_y_label[0] != '\0');
+    int has_title   = (n->chart_title[0] != '\0');
+    
+    double h = has_x_label ? 225.0 : 200.0;
+    double w = 440.0;
+    
+    // Match the layout parameters exactly
+    double x_start = has_y_label ? 65.0 : 50.0;
+    double x_end = 415.0;
+    double plot_width = x_end - x_start;
+    double y_top = 20.0;
+    double y_bottom = 150.0;
+    double plot_height = y_bottom - y_top;
+    
+    // Center the 440px wide chart within the available document render width
+    double ox = current_x + (render_w - w) / 2.0;
+    if (ox < current_x) ox = current_x; 
+    
+    double oy = *y; 
+    
+    Color text_c = {102, 102, 102, "gray_666"};
+    Color title_c = {0, 0, 0, "black"};
+    Color axis_c = {51, 51, 51, "gray_333"};
+    Color grid_c = {229, 231, 235, "gray_e5e7eb"};
+    
+    if (has_title) {
+        double tw = 0;
+        for(int k=0; n->chart_title[k]; k++) tw += get_char_width(n->chart_title[k], 12.0, 1);
+        pdf_draw_text_run(CUR_SB, n->chart_title, ox + (w - tw)/2.0, oy - 12.0, 12.0, 1, 0, title_c);
+        oy -= 25.0; // Spacing to separate the title from the grid
+    }
+    
+    // Calculate the ceiling maximum value
+    double raw_max = 0;
+    for (int i = 0; i < n->chart_count; i++) {
+        if (n->chart_scores[i] > raw_max) raw_max = n->chart_scores[i];
+    }
+    double max_val = raw_max == 0 ? 10.0 : ceil(raw_max / 10.0) * 10.0;
+    if (max_val < 10.0) max_val = 10.0;
+    
+    // Draw the 4 background grid intervals and 5 Y-axis scale labels
+    for (int idx = 0; idx < 5; idx++) {
+        double val = (max_val / 4.0) * (4 - idx);
+        double ly = oy - (y_top + (idx * (plot_height / 4.0)));
+        
+        if (idx < 4) { 
+            draw_pdf_line(ctx, ox + x_start, ly, ox + x_end, ly, grid_c, 1.0);
+        }
+        
+        char lbuf[32];
+        snprintf(lbuf, sizeof(lbuf), "%.0f", val);
+        double lw = 0; for(int k=0; lbuf[k]; k++) lw += get_char_width(lbuf[k], 10.0, 0);
+        pdf_draw_text_run(CUR_SB, lbuf, ox + x_start - 8.0 - lw, ly - 3.0, 10.0, 0, 0, text_c);
+    }
+    
+    // Draw the primary X and Y bounding axes
+    draw_pdf_line(ctx, ox + x_start, oy - y_bottom, ox + x_end, oy - y_bottom, axis_c, 2.0); 
+    draw_pdf_line(ctx, ox + x_start, oy - y_top, ox + x_start, oy - y_bottom, axis_c, 2.0); 
+    
+    // Draw the active bars
+    if (n->chart_count > 0) {
+        double slot_width = plot_width / n->chart_count;
+        double bar_width = slot_width * 0.7;
+        if (bar_width > 35.0) bar_width = 35.0;
+        
+        const char* palette[] = {"#2563eb", "#16a34a", "#d97706", "#dc2626", "#7c3aed", "#06b6d4", "#db2777", "#4f46e5"};
+        int is_random = (strcmp(n->chart_color, "random") == 0);
+        Color default_bar_c = get_color(n->chart_color);
+        
+        for (int i = 0; i < n->chart_count; i++) {
+            double slot_center = x_start + (i * slot_width) + (slot_width / 2.0);
+            double bx = slot_center - (bar_width / 2.0);
+            double b_h = (n->chart_scores[i] / max_val) * plot_height;
+            double by = oy - y_bottom + b_h;
+            
+            Color bar_c = is_random ? get_color(palette[i % 8]) : default_bar_c;
+            
+            if (b_h > 0) {
+                draw_pdf_rect(ctx, ox + bx, by, bar_width, b_h, bar_c, 0, bar_c, 0);
+            }
+            
+            // Draw numerical values above each bar
+            char vbuf[32];
+            snprintf(vbuf, sizeof(vbuf), "%.0f", n->chart_scores[i]);
+            double vw = 0; for(int k=0; vbuf[k]; k++) vw += get_char_width(vbuf[k], 10.0, 0);
+            pdf_draw_text_run(CUR_SB, vbuf, ox + slot_center - (vw/2.0), by + 6.0, 10.0, 0, 0, bar_c);
+            
+            // Draw specific X-axis data labels below each bar
+            double lw = 0; for(int k=0; n->chart_labels[i][k]; k++) lw += get_char_width(n->chart_labels[i][k], 11.0, 0);
+            pdf_draw_text_run(CUR_SB, n->chart_labels[i], ox + slot_center - (lw/2.0), oy - y_bottom - 20.0, 11.0, 0, 0, text_c);
+        }
+    }
+    
+    // Draw overarching Y-axis label 
+    if (has_y_label) {
+        double cy = oy - (y_top + (plot_height / 2.0));
+        double tw = 0; for(int k=0; n->chart_y_label[k]; k++) tw += get_char_width(n->chart_y_label[k], 11.0, 0);
+        pdf_draw_text_run(CUR_SB, n->chart_y_label, ox + 20.0, cy - (tw/2.0), 11.0, 0, 0, (Color){51,51,51,"#333"});
+    }
+    
+    // Draw overarching X-axis label
+    if (has_x_label) {
+        double cx = x_start + (plot_width / 2.0);
+        double tw = 0; for(int k=0; n->chart_x_label[k]; k++) tw += get_char_width(n->chart_x_label[k], 11.0, 0);
+        pdf_draw_text_run(CUR_SB, n->chart_x_label, ox + cx - (tw/2.0), oy - y_bottom - 42.0, 11.0, 0, 0, (Color){51,51,51,"#333"});
+    }
+    
+    *y -= (has_title ? h + 25.0 : h);
+    break;
+}
 case NODE_PIE_CHART: {
     double ch = 260.0;
     double cx = current_x + 140.0;
@@ -2685,6 +2919,8 @@ case NODE_PIE_CHART: {
             if (n->chart_y_label[0]) {
                 pdf_draw_text_run(&ctx->pages[ctx->current_page], n->chart_y_label, start_x + 5.0, plot_bottom + (plot_height / 2.0), 9.0, 0, 0, (Color){51, 51, 51, "label"});
             }
+
+
             if (n->chart_x_label[0]) {
                 pdf_draw_text_run(&ctx->pages[ctx->current_page], n->chart_x_label, x_start_plot + (plot_width / 2.0) - 20.0, plot_bottom - 32.0, 9.0, 0, 0, (Color){51, 51, 51, "label"});
             }
@@ -2824,51 +3060,55 @@ case NODE_PIE_CHART: {
             double ph = 64.0;
             double pw = render_w - 20.0;
 
-            draw_pdf_rect(ctx, px, py_top, pw, ph, get_color("#F7FAFC"), 1, get_color("#E2E8F0"), 0.5);
+            draw_pdf_rect(ctx, px, py_top, pw, ph * 0.375, get_color("#F0FFF4"), 0, (Color){0}, 0);
+            draw_pdf_rect(ctx, px, py_top - ph * 0.375, pw, ph * 0.375, get_color("#FFFAF0"), 0, (Color){0}, 0);
+            draw_pdf_rect(ctx, px, py_top - ph * 0.75, pw, ph * 0.25, get_color("#FFF5F5"), 0, (Color){0}, 0);
 
-            double poly_x[6] = {
-                px + pw * 0.05, px + pw * 0.45, px + pw * 0.95,
-                px + pw * 0.95, px + pw * 0.45, px + pw * 0.05
-            };
-            double poly_y[6] = {
-                py_top - ph * 0.15, py_top - ph * 0.25, py_top - ph * 0.65,
-                py_top - ph * 0.85, py_top - ph * 0.50, py_top - ph * 0.35
-            };
-            sb_printf(CUR_SB, "%.3f %.3f %.3f rg %.3f %.3f %.3f RG 0.5 w\n",
-                      235/255.0, 248/255.0, 255/255.0,
-                      43/255.0, 108/255.0, 176/255.0);
-            sb_printf(CUR_SB, "%.2f %.2f m ", poly_x[0], poly_y[0]);
-            for (int k = 1; k < 6; k++) {
-                sb_printf(CUR_SB, "%.2f %.2f l ", poly_x[k], poly_y[k]);
+            draw_pdf_line(ctx, px, py_top - ph * 0.375, px + pw, py_top - ph * 0.375, get_color("#38A169"), 0.5);
+            draw_pdf_line(ctx, px, py_top - ph * 0.75, px + pw, py_top - ph * 0.75, get_color("#E53E3E"), 0.5);
+
+            render_styled_text(CUR_SB, "#text(size: 5.5pt, fill: \"#276749\")[*Normal (>= -1.0)*]", px, py_top - 4.0, pw - 4.0, 5.5, 2, get_color("#276749"), 0);
+            render_styled_text(CUR_SB, "#text(size: 5.5pt, fill: \"#C05621\")[*Osteopenia (-1.0 to -2.5)*]", px, py_top - ph * 0.375 - 4.0, pw - 4.0, 5.5, 2, get_color("#C05621"), 0);
+            render_styled_text(CUR_SB, "#text(size: 5.5pt, fill: \"#9B2C2C\")[*Osteoporosis (<= -2.5)*]", px, py_top - ph * 0.75 - 4.0, pw - 4.0, 5.5, 2, get_color("#9B2C2C"), 0);
+
+            int cnt = n->chart_count > 0 ? n->chart_count : 5;
+            double col_w = pw / cnt;
+            double bar_w = MIN(16.0, col_w * 0.6);
+
+            for (int i = 0; i < cnt; i++) {
+                double bar_x = px + (i + 0.5) * col_w - bar_w / 2.0;
+                double val = n->chart_scores[i];
+                double zero_y = py_top - ph * 0.375;
+                
+                double clamped_val = val;
+                if (clamped_val > 1.0) clamped_val = 1.0;
+                if (clamped_val < -3.0) clamped_val = -3.0;
+
+                double score_y = py_top - ph * ((1.0 - clamped_val) / 4.0);
+                double top_bar_y = (score_y > zero_y) ? score_y : zero_y;
+                double bar_h = fabs(score_y - zero_y);
+                if (bar_h < 1.0) bar_h = 1.0;
+
+                Color bar_color = (val <= -2.5) ? get_color("#E53E3E") : (val <= -1.0) ? get_color("#DD6B20") : get_color("#38A169");
+                draw_pdf_rect(ctx, bar_x, top_bar_y, bar_w, bar_h, bar_color, 0, (Color){0}, 0);
+
+                char score_str[64];
+                snprintf(score_str, sizeof(score_str), "#text(size: 6.5pt)[*%.1f*]", val);
+                double score_text_y = (val >= 0) ? top_bar_y + 8.0 : top_bar_y - bar_h - 2.0;
+                if (score_text_y > py_top - 2.0) score_text_y = py_top - 2.0;
+                if (score_text_y < py_top - ph + 10.0) score_text_y = py_top - ph + 10.0;
+                
+                render_styled_text(CUR_SB, score_str, px + i * col_w, score_text_y, col_w, 6.5, 1, get_color("#1A365D"), 0);
+
+                char label_str[64];
+                snprintf(label_str, sizeof(label_str), "#text(size: 6.5pt)[*%s*]", n->chart_labels[i]);
+                char sanitized_lbl[64];
+                sanitize_utf8_to_winansi(sanitized_lbl, label_str, sizeof(sanitized_lbl));
+                render_styled_text(CUR_SB, sanitized_lbl, px + i * col_w, py_top - ph - 2.0, col_w, 6.5, 1, get_color("#2D3748"), 0);
             }
-            sb_printf(CUR_SB, "h b\n0 0 0 RG\n");
-
-            double x1 = pw * 0.68, y1 = py_top - ph * 0.52;
-            double x2 = pw * 0.82, y2 = py_top - ph * 0.68;
-
-            draw_pdf_line(ctx, px + x1, y1, px + x2, y2, get_color("#E53E3E"), 1.5);
-            draw_pdf_rect(ctx, px + x1 - 2.0, y1 + 2.0, 4.0, 4.0, get_color("#E53E3E"), 0, (Color){0}, 0);
-            draw_pdf_rect(ctx, px + x2 - 2.0, y2 + 2.0, 4.0, 4.0, get_color("#E53E3E"), 0, (Color){0}, 0);
-
-            char l1_str[128], l2_str[128];
-            snprintf(l1_str, sizeof(l1_str), "#text(size: 6.5pt, fill: \"#7B2C2C\")[*2024: %s g/cm²*]", n->chart_v1);
-            snprintf(l2_str, sizeof(l2_str), "#text(size: 6.5pt, fill: \"#7B2C2C\")[*2026: %s (%s)*]", n->chart_v2, n->chart_pct);
-            
-            char sanitized_l1[128], sanitized_l2[128];
-            sanitize_utf8_to_winansi(sanitized_l1, l1_str, sizeof(sanitized_l1));
-            sanitize_utf8_to_winansi(sanitized_l2, l2_str, sizeof(sanitized_l2));
-
-            render_styled_text(CUR_SB, sanitized_l1, px + x1 - 70.0, y1 + 4.0, 100.0, 6.5, 0, get_color("#7B2C2C"), 0);
-            render_styled_text(CUR_SB, sanitized_l2, px + x2 + 4.0, y2 - 4.0, 100.0, 6.5, 0, get_color("#7B2C2C"), 0);
-
-            render_styled_text(CUR_SB, "#text(size: 7pt, fill: \"#4A5568\")[Age 20]", px + 4.0, py_top - ph - 8.0, 50.0, 7.0, 0, get_color("#4A5568"), 0);
-            render_styled_text(CUR_SB, "#text(size: 7pt, fill: \"#4A5568\")[Age 50]", px + pw * 0.45 - 15.0, py_top - ph - 8.0, 50.0, 7.0, 1, get_color("#4A5568"), 0);
-            render_styled_text(CUR_SB, "#text(size: 7pt, fill: \"#4A5568\")[Age 80]", px + pw - 35.0, py_top - ph - 8.0, 50.0, 7.0, 2, get_color("#4A5568"), 0);
-
             *y -= h;
             break;
         }
-        default: break;
     }
     #undef CUR_SB
 }
@@ -3285,6 +3525,39 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     SelectObject(memDC, of);
                     DeleteObject(font);
                 }
+                else if (it->type == DL_LINE) {
+                    int map_y = offset_y + (int)((page_height - it->y) * scale);
+                    int map_y2 = offset_y + (int)((page_height - (it->y + it->h)) * scale);
+                    
+                    HPEN pen = CreatePen(PS_SOLID, max(1, (int)(it->stroke_w * scale)), RGB(it->c.r, it->c.g, it->c.b));
+                    HGDIOBJ op = SelectObject(memDC, pen);
+                    MoveToEx(memDC, map_x, map_y, NULL);
+                    LineTo(memDC, map_x + map_w, map_y2);
+                    SelectObject(memDC, op);
+                    DeleteObject(pen);
+                }
+                else if (it->type == DL_TEXT) {
+                    int map_y = offset_y + (int)((page_height - it->y) * scale);
+                    SetTextAlign(memDC, TA_LEFT | TA_BASELINE);
+                    SetTextColor(memDC, RGB(it->c.r, it->c.g, it->c.b));
+                    
+                    int font_height = (int)(it->font_size * scale);
+                    if (font_height < 1) font_height = 1;
+                    
+                    int font_weight = it->is_bold ? FW_BOLD : FW_NORMAL;
+                    DWORD italic = it->is_italic ? TRUE : FALSE;
+                    
+                    HFONT font = CreateFontA(
+                        -font_height, 0, 0, 0, font_weight, italic, FALSE, FALSE,
+                        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, "Arial"
+                    );
+                    
+                    HGDIOBJ of = SelectObject(memDC, font);
+                    TextOutA(memDC, map_x, map_y, it->text, (int)strlen(it->text));
+                    SelectObject(memDC, of);
+                    DeleteObject(font);
+                }
         else if (it->type == DL_PIE) {
             int map_y = offset_y + (int)((page_height - (it->y + it->h)) * scale);
             int map_h = (int)(it->h * scale);
@@ -3317,6 +3590,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         }
 
             }
+
 
             BitBlt(hdc, 0, 0, win_w, win_h, memDC, 0, 0, SRCCOPY);
             SelectObject(memDC, oldBitmap);
